@@ -47,6 +47,21 @@ func writeResult(res WorkerResult) {
 }
 
 func main() {
+	const numWorkers = 10
+	taskCh := make(chan WorkerPayload, 100)
+	var wg sync.WaitGroup
+
+	// Start worker pool
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for wp := range taskCh {
+				processTask(wp)
+			}
+		}()
+	}
+
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		line := scanner.Bytes()
@@ -67,29 +82,31 @@ func main() {
 			Timestamp:     time.Now(),
 		})
 
-		// 2. Process task asynchronously in a goroutine
-		go func(taskID string, rawPayload json.RawMessage) {
-			var payload CsvPayload
-			if err := json.Unmarshal(rawPayload, &payload); err != nil {
-				log.Printf("Failed to decode csv payload: %v", err)
-				writeError(taskID, err.Error())
-				return
-			}
-
-			// Simulate Work (e.g., generating PDF)
-			time.Sleep(1 * time.Second) // Fake processing time
-
-			writeResult(WorkerResult{
-				TaskID:        taskID,
-				ResultMessage: WorkerResultSuccessMesssage,
-				Timestamp:     time.Now(),
-			})
-		}(wp.TaskID, wp.Payload)
+		// 2. Queue task to worker pool
+		taskCh <- wp
 	}
+
+	close(taskCh)
+	wg.Wait()
 
 	if err := scanner.Err(); err != nil {
 		log.Fatalf("Error reading stdin: %v", err)
 	}
+}
+
+func processTask(wp WorkerPayload) {
+	var payload CsvPayload
+	if err := json.Unmarshal(wp.Payload, &payload); err != nil {
+		log.Printf("Failed to decode csv payload: %v", err)
+		writeError(wp.TaskID, err.Error())
+		return
+	}
+
+	writeResult(WorkerResult{
+		TaskID:        wp.TaskID,
+		ResultMessage: WorkerResultSuccessMesssage,
+		Timestamp:     time.Now(),
+	})
 }
 
 func writeError(taskID string, errMsg string) {

@@ -17,7 +17,7 @@ import (
 )
 
 type Service interface {
-	GetTask(ctx context.Context) (Task, error)
+	GetTask(ctx context.Context) ([]Task, error)
 	FailTask(ctx context.Context, id uuid.UUID, lastError json.RawMessage, timestamp time.Time) (uuid.UUID, error)
 	CompleteTask(ctx context.Context, id uuid.UUID, timestamp time.Time) (uuid.UUID, error)
 

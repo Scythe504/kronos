@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"time"
 )
@@ -46,6 +45,7 @@ func (p *Pipeline) ResultHandler(ctx context.Context, rawRes json.RawMessage) {
 	var wr WorkerResult
 	if err := json.Unmarshal(rawRes, &wr); err != nil {
 		log.Println("ERR(UnmarshalingWorkerResult)", err, string(rawRes))
+		return
 	}
 	wr.Timestamp = time.Now()
 
@@ -57,10 +57,10 @@ func (p *Pipeline) ResultHandler(ctx context.Context, rawRes json.RawMessage) {
 	case WorkerResultACKTimeoutMessage:
 		p.db.FailTask(ctx, wr.TaskID, []byte(`{"error": "worker process failed to acknowledge tasks"}`), wr.Timestamp)
 	case WorkerResultACKMessage:
-		log.Println("[TaskID]:", wr.TaskID, "ACK!")
+		// log.Println("[TaskID]:", wr.TaskID, "ACK!")
 		return
 	}
 
-	wrBytes, _ := json.MarshalIndent(wr, "", " ")
-	fmt.Println(string(wrBytes))
+	// wrBytes, _ := json.MarshalIndent(wr, "", " ")
+	// fmt.Println(string(wrBytes))
 }

@@ -30,7 +30,7 @@ func randInt(max *big.Int) *big.Int {
 	return r
 }
 
-const seedCount = 10
+const seedCount = 1000000
 
 const (
 	slugVidTranscoding payloadSlug = "video_transcode"
@@ -135,7 +135,7 @@ func (s *service) migrate() error {
 }
 
 func main() {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	New(ctx)
 

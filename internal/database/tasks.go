@@ -18,15 +18,15 @@ func (t *Task) Scan(row pgx.Row) error {
 	)
 }
 
-func (s *service) GetTask(ctx context.Context) (Task, error) {
+func (s *service) GetTask(ctx context.Context) ([]Task, error) {
 	query := `UPDATE tasks
 			SET status = $1
-			WHERE id = (
+			WHERE id IN (
 				SELECT id
 				FROM tasks
 				WHERE status = 'queued' AND deleted_at IS NULL
 				ORDER BY created_at ASC
-				LIMIT 1
+				LIMIT 50
 				FOR UPDATE SKIP LOCKED
 			)
 			RETURNING id, payload_slug, payload, retry_count, max_retry_count, 
@@ -34,15 +34,18 @@ func (s *service) GetTask(ctx context.Context) (Task, error) {
 				cron_expression, task_type, status, allocated_unit, 
 				created_at, updated_at, deleted_at
 		`
-	row := s.pool.QueryRow(ctx, query, TaskStatusRunning)
-
-	task := Task{}
-
-	if err := task.Scan(row); err != nil {
-		return task, err
+	var tasks []Task
+	rows, err := s.pool.Query(ctx, query, TaskStatusRunning)
+	if err != nil {
+		return tasks, err
 	}
 
-	return task, nil
+	tasks, err = pgx.CollectRows(rows, pgx.RowToStructByName[Task])
+	if err != nil {
+		return tasks, err
+	}
+
+	return tasks, nil
 }
 
 func (s *service) CompleteTask(ctx context.Context, id uuid.UUID, timestamp time.Time) (uuid.UUID, error) {
