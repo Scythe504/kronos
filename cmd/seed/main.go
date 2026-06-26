@@ -125,7 +125,7 @@ func (s *service) migrate() error {
 		return err
 	}
 
-	if err := goose.Up(db, "./internal/database/migrations"); err != nil {
+	if err := goose.Up(db, "migrations"); err != nil {``
 		return err
 	}
 
@@ -137,12 +137,12 @@ func main() {
 	defer cancel()
 	New(ctx)
 
-	var count int
-	db.pool.QueryRow(ctx, "SELECT COUNT(*) FROM tasks").Scan(&count)
-	if count > 0 {
-		log.Println("Already seeded, skipping")
-		return
-	}
+	// var count int
+	// db.pool.QueryRow(ctx, "SELECT COUNT(*) FROM tasks").Scan(&count)
+	// if count > 0 {
+	// 	log.Println("Already seeded, skipping")
+	// 	return
+	// }
 
 	maxInt := big.NewInt(2)
 

@@ -11,9 +11,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
+	_ "github.com/joho/godotenv/autoload"
 )
 
 type Service interface {
+	GetTask(ctx context.Context) (Task, error)
+
 	Health() map[string]string
 	Close()
 }
