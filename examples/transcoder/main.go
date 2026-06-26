@@ -14,20 +14,20 @@ type WorkerPayload struct {
 	Payload json.RawMessage `json:"payload"`
 }
 
-type CsvPayload struct {
-	SourceURI  string `json:"source_uri"`
-	TargetURI  string `json:"target_uri"`
-	Layout     string `json:"layout"`
-	HasHeaders bool   `json:"has_headers"`
-	FontSize   int    `json:"font_size"`
+type VideoPayload struct {
+	SourceURI    string `json:"source_uri"`
+	TargetURI    string `json:"target_uri"`
+	Resolution   string `json:"resolution"`
+	Format       string `json:"format"`
+	ExtractAudio bool   `json:"extract_audio"`
 }
 
 type WorkerResult struct {
-	TaskID      string `json:"task_id"`
-	Status      string `json:"status"`
-	Pages       int    `json:"pages"`
-	TimeTakenMs int64  `json:"time_taken_ms"`
-	Error       string `json:"error,omitempty"`
+	TaskID       string `json:"task_id"`
+	Status       string `json:"status"`
+	BytesWritten int    `json:"bytes_written"`
+	TimeTakenMs  int64  `json:"time_taken_ms"`
+	Error        string `json:"error,omitempty"`
 }
 
 func main() {
@@ -46,21 +46,21 @@ func main() {
 			continue
 		}
 
-		var payload CsvPayload
+		var payload VideoPayload
 		if err := json.Unmarshal(wp.Payload, &payload); err != nil {
-			log.Printf("Failed to decode csv payload: %v", err)
+			log.Printf("Failed to decode video payload: %v", err)
 			writeError(wp.TaskID, err.Error(), time.Since(start).Milliseconds())
 			continue
 		}
 
-		// Simulate Work (e.g., generating PDF)
-		time.Sleep(1 * time.Second) // Fake processing time
+		// Simulate Work (e.g., FFMPEG processing)
+		time.Sleep(2 * time.Second) // Fake processing time
 
 		result := WorkerResult{
-			TaskID:      wp.TaskID,
-			Status:      "success",
-			Pages:       14, // Simulated page count
-			TimeTakenMs: time.Since(start).Milliseconds(),
+			TaskID:       wp.TaskID,
+			Status:       "success",
+			BytesWritten: 10485760, // 10MB simulated
+			TimeTakenMs:  time.Since(start).Milliseconds(),
 		}
 
 		if err := json.NewEncoder(os.Stdout).Encode(result); err != nil {
@@ -75,10 +75,10 @@ func main() {
 
 func writeError(taskID string, errMsg string, elapsed int64) {
 	result := WorkerResult{
-		TaskID:      taskID,
-		Status:      "failed",
-		Error:       errMsg,
-		TimeTakenMs: elapsed,
+		TaskID:       taskID,
+		Status:       "failed",
+		Error:        errMsg,
+		TimeTakenMs:  elapsed,
 	}
 	_ = json.NewEncoder(os.Stdout).Encode(result)
 }
