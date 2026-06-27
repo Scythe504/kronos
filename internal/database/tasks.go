@@ -23,6 +23,7 @@ func (s *service) GetTask(ctx context.Context, taskId string) (Task, error) {
 	if err != nil {
 		return Task{}, err
 	}
+	defer rows.Close()
 
 	return pgx.CollectOneRow(rows, pgx.RowToStructByName[Task])
 }

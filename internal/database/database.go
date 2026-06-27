@@ -26,6 +26,7 @@ type Service interface {
 	UpdateNodeStatus(ctx context.Context, machineID string, status NodeStatus) (string, error)
 	GetNode(ctx context.Context, machineID string) (Node, error)
 	GetNodes(ctx context.Context, page int, perPage int) ([]Node, error)
+	UpdateNodeLastHBeat(ctx context.Context, machineID string) (string, error)
 
 	Health() map[string]string
 	Close()

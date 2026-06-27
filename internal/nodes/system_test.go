@@ -11,6 +11,10 @@ func TestGetSystemInfo(t *testing.T) {
 		t.Fatalf("failed to get system info: %v", err)
 	}
 
+	if info == nil {
+		t.Fatal("expected to get some systemInfo but got nil")
+	}
+
 	t.Logf("MachineID: %s", info.MachineID)
 	t.Logf("Kernel: %s", info.Kernel)
 	t.Logf("Hostname: %s", info.Hostname)

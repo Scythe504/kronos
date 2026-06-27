@@ -104,6 +104,7 @@ func (s *service) GetNode(ctx context.Context, machineID string) (Node, error) {
 	if err != nil {
 		return Node{}, err
 	}
+	defer rows.Close()
 	return pgx.CollectOneRow(rows, pgx.RowToStructByName[Node])
 }
 
@@ -146,4 +147,19 @@ func (s *service) GetNodes(ctx context.Context, page int, perPage int) ([]Node, 
 	defer rows.Close()
 
 	return pgx.CollectRows(rows, pgx.RowToStructByName[Node])
+}
+
+func (s *service) UpdateNodeLastHBeat(ctx context.Context, machineID string) (string, error) {
+	query := `UPDATE nodes
+		SET last_heartbeat_at = now(), status = 'active'::node_status
+		WHERE machine_id = $1 AND nodes.status != 'inactive'::node_status
+		RETURNING machine_id
+	`
+	var retID string
+	row := s.pool.QueryRow(ctx, query, machineID)
+	if err := row.Scan(&retID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return "", err
+	}
+
+	return retID, nil
 }
