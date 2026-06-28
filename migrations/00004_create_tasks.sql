@@ -1,6 +1,6 @@
 -- +goose Up
 CREATE TYPE task_type AS ENUM ('cron', 'one_off', 'event_driven');
-CREATE TYPE task_status AS ENUM ('failed', 'queued', 'running', 'completed');
+CREATE TYPE task_status AS ENUM ('failed', 'queued', 'running', 'completed', 'pending');
 CREATE TABLE IF NOT EXISTS tasks (
   id UUID PRIMARY KEY DEFAULT uuidv7(),
   workflow_id UUID REFERENCES workflows(id),
