@@ -23,16 +23,18 @@ func (p *Pipeline) Start(ctx context.Context) {
 
 		tasks, err := p.db.GetTasks(ctx, machineID)
 		if err != nil {
-			if len(tasks) == 0 {
-				pollCount++
-				time.Sleep(JitterTime(pollCount))
-				continue
-			}
-
 			log.Println("ERR(Dispatcher): ", err)
 			time.Sleep(2 * time.Second)
 			continue
 		}
+
+		if len(tasks) == 0 {
+			pollCount++
+			time.Sleep(JitterTime(pollCount))
+			continue
+		}
+
+		// reset pollCount when we get new payloads
 		pollCount = 0
 		for _, task := range tasks {
 			go func() {
