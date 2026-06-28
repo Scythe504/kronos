@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   execution_schedule_time    TIMESTAMPTZ,
   cron_expression            VARCHAR(100) DEFAULT NULL,
   execution_interval_seconds INT DEFAULT 900,
+  next_retry_at              TIMESTAMPTZ,
 
   task_type task_type NOT NULL,
   status task_status NOT NULL DEFAULT 'queued',

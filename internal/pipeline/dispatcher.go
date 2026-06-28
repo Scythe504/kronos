@@ -2,17 +2,17 @@ package pipeline
 
 import (
 	"context"
-	"errors"
 	"log"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/scythe504/kronos/internal/nodes"
 )
 
 func (p *Pipeline) Start(ctx context.Context) {
 	nodeCfg := nodes.GetNodeConfig(ctx)
 	machineID := nodeCfg.MachineID
+
+	pollCount := 0
 
 	for {
 		select {
@@ -23,8 +23,9 @@ func (p *Pipeline) Start(ctx context.Context) {
 
 		tasks, err := p.db.GetTasks(ctx, machineID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				time.Sleep(1 * time.Second)
+			if len(tasks) == 0 {
+				pollCount++
+				time.Sleep(JitterTime(pollCount))
 				continue
 			}
 
@@ -32,6 +33,7 @@ func (p *Pipeline) Start(ctx context.Context) {
 			time.Sleep(2 * time.Second)
 			continue
 		}
+		pollCount = 0
 		for _, task := range tasks {
 			go func() {
 				adapted, err := AdaptTask(task)

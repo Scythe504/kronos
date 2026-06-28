@@ -57,10 +57,6 @@ func (p *Pipeline) ResultHandler(ctx context.Context, rawRes json.RawMessage) {
 	case WorkerResultACKTimeoutMessage:
 		p.db.FailTask(ctx, wr.TaskID, []byte(`{"error": "worker process failed to acknowledge tasks"}`), wr.Timestamp)
 	case WorkerResultACKMessage:
-		// log.Println("[TaskID]:", wr.TaskID, "ACK!")
 		return
 	}
-
-	// wrBytes, _ := json.MarshalIndent(wr, "", " ")
-	// fmt.Println(string(wrBytes))
 }

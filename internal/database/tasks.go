@@ -13,7 +13,7 @@ func (s *service) GetTask(ctx context.Context, taskId string) (Task, error) {
 	query := `SELECT
 			id, payload_slug, payload, retry_count, max_retry_count, 
 			last_error, execution_schedule_time, execution_interval_seconds,
-			cron_expression, task_type, status, allocated_unit, assigned_node_id,
+			cron_expression, next_retry_at, task_type, status, allocated_unit, assigned_node_id,
 			created_at, updated_at, deleted_at
 		FROM tasks
 		WHERE id = $1
@@ -34,14 +34,14 @@ func (s *service) GetTasks(ctx context.Context, machineID string) ([]Task, error
 			WHERE id IN (
 				SELECT id
 				FROM tasks
-				WHERE status = 'queued' AND deleted_at IS NULL
+				WHERE status = 'queued' AND (next_retry_at IS NULL OR next_retry_at <= now()) AND deleted_at IS NULL
 				ORDER BY created_at ASC
-				LIMIT 50
+				LIMIT 20
 				FOR UPDATE SKIP LOCKED
 			)
 			RETURNING id, payload_slug, payload, retry_count, max_retry_count, 
 				last_error, execution_schedule_time, execution_interval_seconds,
-				cron_expression, task_type, status, allocated_unit, assigned_node_id,
+				cron_expression, next_retry_at, task_type, status, allocated_unit, assigned_node_id,
 				created_at, updated_at, deleted_at
 		`
 	var tasks []Task

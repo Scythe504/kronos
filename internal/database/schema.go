@@ -42,6 +42,7 @@ type Task struct {
 	ExecutionScheduleTime    *int64          `db:"execution_schedule_time" json:"execution_schedule_time"`
 	CronExpression           *string         `db:"cron_expression" json:"cron_expression"`
 	ExecutionIntervalSeconds *int64          `db:"execution_interval_seconds" json:"execution_interval_seconds"`
+	NextRetryAt              time.Time       `db:"next_retry_at" json:"next_retry_at"`
 	TaskType                 TaskType        `db:"task_type" json:"task_type"`
 	Status                   TaskStatus      `db:"status" json:"status"`
 	AllocatedUnit            TaskUnit        `db:"allocated_unit" json:"allocated_unit"`

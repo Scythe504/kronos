@@ -3,12 +3,14 @@ package utils
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"fmt"
+	"math/big"
+	"net"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
-	"net"
 )
 
 // GetLocalIP finds the primary outbound IP address.
@@ -145,4 +147,13 @@ func getWindowsHostIP(ctx context.Context) (string, error) {
 		return fallbackIP, nil
 	}
 	return "", fmt.Errorf("no physical host IP found")
+}
+
+func RandInt(max *big.Int) int64 {
+	r, err := rand.Int(rand.Reader, max)
+	if err != nil {
+		panic(err)
+	}
+
+	return r.Int64()
 }
