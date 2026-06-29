@@ -8,15 +8,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// TaskType represents the type of a task (e.g., cron, one_off, event_driven)
-type TaskType string
-
-const (
-	TaskTypeCron        TaskType = "cron"
-	TaskTypeOneOff      TaskType = "one_off"
-	TaskTypeEventDriven TaskType = "event_driven"
-)
-
 // TaskUnit represents the hardware target of a task (e.g., cpu, gpu)
 type TaskUnit string
 
@@ -33,6 +24,7 @@ const (
 	TaskStatusQueued    TaskStatus = "queued"
 	TaskStatusRunning   TaskStatus = "running"
 	TaskStatusCompleted TaskStatus = "completed"
+	TaskStatusPending   TaskStatus = "pending"
 )
 
 // NodeStatus represents the current state of a node
@@ -59,7 +51,6 @@ type TriggerCondition string
 const (
 	TriggerConditionOnSuccess TriggerCondition = "on_success"
 	TriggerConditionOnFailure TriggerCondition = "on_failure"
-	TriggerConditionAlways    TriggerCondition = "always"
 )
 
 // Worker represents the configuration of a registered worker service/executable
@@ -101,23 +92,21 @@ type Node struct {
 
 // Task represents an executable unit of work dispatched to a node
 type Task struct {
-	ID                       uuid.UUID       `db:"id" json:"id"`
-	PayloadSlug              string          `db:"payload_slug" json:"payload_slug"`
-	Payload                  json.RawMessage `db:"payload" json:"payload"`
-	RetryCount               *int            `db:"retry_count" json:"retry_count"`
-	MaxRetryCount            *int            `db:"max_retry_count" json:"max_retry_count"`
-	LastError                json.RawMessage `db:"last_error" json:"last_error"`
-	ExecutionScheduleTime    sql.NullTime    `db:"execution_schedule_time" json:"execution_schedule_time"`
-	CronExpression           *string         `db:"cron_expression" json:"cron_expression"`
-	ExecutionIntervalSeconds *int            `db:"execution_interval_seconds" json:"execution_interval_seconds"`
-	NextRetryAt              sql.NullTime    `db:"next_retry_at" json:"next_retry_at"`
-	TaskType                 TaskType        `db:"task_type" json:"task_type"`
-	Status                   TaskStatus      `db:"status" json:"status"`
-	AllocatedUnit            TaskUnit        `db:"allocated_unit" json:"allocated_unit"`
-	AssignedNodeID           *string         `db:"assigned_node_id" json:"assigned_node_id"`
-	CreatedAt                time.Time       `db:"created_at" json:"created_at"`
-	UpdatedAt                time.Time       `db:"updated_at" json:"updated_at"`
-	DeletedAt                sql.NullTime    `db:"deleted_at" json:"deleted_at"`
+	ID             uuid.UUID       `db:"id" json:"id"`
+	WorkflowRunID  *uuid.UUID      `db:"workflow_run_id" json:"workflow_run_id"`
+	WorkflowStepID *uuid.UUID      `db:"workflow_step_id" json:"workflow_step_id"`
+	PayloadSlug    string          `db:"payload_slug" json:"payload_slug"`
+	Payload        json.RawMessage `db:"payload" json:"payload"`
+	RetryCount     *int            `db:"retry_count" json:"retry_count"`
+	MaxRetryCount  *int            `db:"max_retry_count" json:"max_retry_count"`
+	LastError      json.RawMessage `db:"last_error" json:"last_error"`
+	NextRetryAt    sql.NullTime    `db:"next_retry_at" json:"next_retry_at"`
+	Status         TaskStatus      `db:"status" json:"status"`
+	AllocatedUnit  TaskUnit        `db:"allocated_unit" json:"allocated_unit"`
+	AssignedNodeID *string         `db:"assigned_node_id" json:"assigned_node_id"`
+	CreatedAt      time.Time       `db:"created_at" json:"created_at"`
+	UpdatedAt      time.Time       `db:"updated_at" json:"updated_at"`
+	DeletedAt      sql.NullTime    `db:"deleted_at" json:"deleted_at"`
 }
 
 // Workflow represents a defined pipeline of task executions
@@ -126,8 +115,19 @@ type Workflow struct {
 	Name          string          `db:"name" json:"name"`
 	TriggerType   TriggerType     `db:"trigger_type" json:"trigger_type"`
 	TriggerConfig json.RawMessage `db:"trigger_config" json:"trigger_config"`
+	NextRunAt     sql.NullTime    `db:"next_run_at" json:"next_run_at"`
 	CreatedAt     time.Time       `db:"created_at" json:"created_at"`
 	UpdatedAt     time.Time       `db:"updated_at" json:"updated_at"`
+	DeletedAt     sql.NullTime    `db:"deleted_at" json:"deleted_at"`
+}
+
+// WorkflowRun represents a defined instance of a workflow execution
+type WorkflowRun struct {
+	ID         uuid.UUID `db:"id" json:"id"`
+	WorkflowID uuid.UUID `db:"workflow_id" json:"workflow_id"`
+	Status     string    `db:"status" json:"status"`
+	CreatedAt  time.Time `db:"created_at" json:"created_at"`
+	UpdatedAt  time.Time `db:"updated_at" json:"updated_at"`
 }
 
 // WorkflowStep represents a step in a workflow

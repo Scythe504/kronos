@@ -51,7 +51,7 @@ func (p *Pipeline) ResultHandler(ctx context.Context, rawRes json.RawMessage) {
 
 	switch wr.ResultMessage {
 	case WorkerResultSuccessMesssage:
-		p.db.CompleteTask(ctx, wr.TaskID, wr.Timestamp)
+		p.db.CompleteTask(ctx, wr.TaskID, wr.Timestamp, wr.Output)
 	case WorkerResultFailedMessage:
 		p.db.FailTask(ctx, wr.TaskID, wr.Error, wr.Timestamp)
 	case WorkerResultACKTimeoutMessage:

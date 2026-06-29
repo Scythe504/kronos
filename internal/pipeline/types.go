@@ -19,6 +19,7 @@ const (
 type WorkerResult struct {
 	TaskID        uuid.UUID           `json:"task_id"`
 	ResultMessage WorkerResultMessage `json:"result_message"`
+	Output        json.RawMessage     `json:"output,omitempty"`
 	Error         json.RawMessage     `json:"error,omitempty"`
 	Timestamp     time.Time           `json:"timestamp"`
 }

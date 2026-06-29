@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS workflows (
   trigger_config JSONB NOT NULL DEFAULT '{}'::jsonb,
   next_run_at TIMESTAMPTZ DEFAULT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ DEFAULT NULL
 );
 CREATE INDEX index_next_run_at ON workflows(next_run_at);
 
@@ -37,9 +38,9 @@ CREATE INDEX index_workflow_steps_workflow_id ON workflow_steps (workflow_id);
 -- +goose Down
 DROP INDEX IF EXISTS index_workflow_steps_workflow_id;
 DROP TABLE IF EXISTS workflow_runs;
-DROP TYPE IF EXISTS workflow_run_status;
 DROP TABLE IF EXISTS workflow_steps;
 DROP INDEX IF EXISTS index_next_run_at;
 DROP TABLE IF EXISTS workflows;
+DROP TYPE IF EXISTS workflow_run_status;
 DROP TYPE IF EXISTS trigger_condition;
 DROP TYPE IF EXISTS trigger_type;

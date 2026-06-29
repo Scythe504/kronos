@@ -20,7 +20,14 @@ type Service interface {
 	GetTask(ctx context.Context, taskId string) (Task, error)
 	GetTasks(ctx context.Context, machineID string) ([]Task, error)
 	FailTask(ctx context.Context, id uuid.UUID, lastError json.RawMessage, timestamp time.Time) (uuid.UUID, error)
-	CompleteTask(ctx context.Context, id uuid.UUID, timestamp time.Time) (uuid.UUID, error)
+	CompleteTask(ctx context.Context, id uuid.UUID, timestamp time.Time, outputPayload json.RawMessage) (uuid.UUID, uuid.UUID, error)
+	CreateTask(ctx context.Context, payloadSlug string, payload json.RawMessage, runID *uuid.UUID, stepID *uuid.UUID, unit *TaskUnit) (uuid.UUID, error)
+
+	// Workflow operations
+	CreateWorkflowTemplate(ctx context.Context, wp WorkflowPayload) (uuid.UUID, error)
+	CompleteWorkflowRun(ctx context.Context, workflowRunID uuid.UUID, workflowID uuid.UUID) (uuid.UUID, error)
+	TriggerWorkflow(ctx context.Context, workflowID uuid.UUID) (uuid.UUID, error)
+	TriggerDueCronWorkflows(ctx context.Context) ([]uuid.UUID, error)
 
 	RegisterNode(ctx context.Context, n Node) (string, error)
 	UpdateNodeStatus(ctx context.Context, machineID string, status NodeStatus) (string, error)
