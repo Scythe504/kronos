@@ -35,7 +35,7 @@ func (s *service) CreateWorkflowTemplate(ctx context.Context, wp WorkflowPayload
 	`
 
 	opts := pgx.TxOptions{
-		IsoLevel:       pgx.ReadUncommitted,
+		IsoLevel:       pgx.ReadCommitted,
 		AccessMode:     pgx.ReadWrite,
 		DeferrableMode: pgx.NotDeferrable,
 	}
@@ -81,12 +81,11 @@ func (s *service) CompleteWorkflowRun(ctx context.Context, workflowRunID uuid.UU
 		RETURNING id
 	`
 	row := s.pool.QueryRow(ctx, query, workflowRunID, workflowID)
-	var retID uuid.UUID
-	if err := row.Scan(&retID); err != nil {
+	var runRetId uuid.UUID
+	if err := row.Scan(&runRetId); err != nil {
 		return uuid.Nil, err
 	}
-
-	return retID, nil
+	return runRetId, nil
 }
 
 func (s *service) TriggerWorkflow(ctx context.Context, workflowID uuid.UUID) (uuid.UUID, error) {
@@ -141,26 +140,25 @@ func (s *service) TriggerWorkflow(ctx context.Context, workflowID uuid.UUID) (uu
 		}
 	}
 
-	query := `SELECT ws.id, ws.slug, ws.default_payload 
+	query := `SELECT ws.id, ws.slug, ws.payload 
 		FROM workflow_steps ws
 		INNER JOIN workflows w ON ws.workflow_id = w.id
 		WHERE ws.workflow_id = $1 AND ws.step_order = 1 AND ws.condition = 'on_success'
 		  AND w.deleted_at IS NULL`
 	
-	rows, err := tx.Query(ctx, query, workflowID)
+	var stepID uuid.UUID
+	var slug string
+	var payload json.RawMessage
+
+	err = tx.QueryRow(ctx, query, workflowID).Scan(&stepID, &slug, &payload)
 	if err != nil {
 		return uuid.Nil, err
 	}
 
-	st, err := pgx.CollectExactlyOneRow(rows, pgx.RowToStructByName[WorkflowStep])
-	if err != nil {
-		return uuid.Nil, err
-	}
-
-	queryTask := `INSERT INTO tasks (workflow_run_id, workflow_step_id, payload_slug, payload, allocated_unit, status)
-		SELECT $1, $2, $3, $4, w.task_unit, 'queued'::task_status
-		FROM workers w WHERE w.slug = $3`
-	_, err = tx.Exec(ctx, queryTask, runID, st.ID, st.Slug, st.DefaultPayload)
+	queryTask := `INSERT INTO tasks (workflow_run_id, workflow_step_id, workflow_id, payload_slug, payload, allocated_unit, status)
+		SELECT $1, $2, $3, $4::varchar, $5, w.task_unit, 'queued'::task_status
+		FROM workers w WHERE w.slug = $4::varchar`
+	_, err = tx.Exec(ctx, queryTask, runID, stepID, workflowID, slug, payload)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -198,11 +196,9 @@ func (s *service) TriggerDueCronWorkflows(ctx context.Context) ([]uuid.UUID, err
 	}
 	defer tx.Rollback(ctx)
 
-	query := `SELECT id, name, trigger_config
+	query := `SELECT id, trigger_config
 		FROM workflows
-		WHERE trigger_type = 'cron'
-		  AND (next_run_at IS NULL OR next_run_at <= now())
-		  AND deleted_at IS NULL
+		WHERE trigger_type = 'cron' AND (next_run_at IS NULL OR next_run_at <= now()) AND deleted_at IS NULL
 		LIMIT 30
 		FOR UPDATE SKIP LOCKED`
 
@@ -210,23 +206,17 @@ func (s *service) TriggerDueCronWorkflows(ctx context.Context) ([]uuid.UUID, err
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
 	type dueWorkflow struct {
-		ID            uuid.UUID
-		Name          string
-		TriggerConfig json.RawMessage
+		ID            uuid.UUID       `db:"id"`
+		TriggerConfig json.RawMessage `db:"trigger_config"`
 	}
 
-	var dueWorkflows []dueWorkflow
-	for rows.Next() {
-		var w dueWorkflow
-		if err := rows.Scan(&w.ID, &w.Name, &w.TriggerConfig); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		dueWorkflows = append(dueWorkflows, w)
+	dueWorkflows, err := pgx.CollectRows(rows, pgx.RowToStructByName[dueWorkflow])
+	if err != nil {
+		return nil, err
 	}
-	rows.Close()
 
 	var runIDs []uuid.UUID
 
@@ -265,7 +255,7 @@ func (s *service) TriggerDueCronWorkflows(ctx context.Context) ([]uuid.UUID, err
 			return nil, err
 		}
 
-		stepQuery := `SELECT ws.id, ws.slug, ws.default_payload 
+		stepQuery := `SELECT ws.id, ws.slug, ws.payload 
 			FROM workflow_steps ws
 			INNER JOIN workflows w ON ws.workflow_id = w.id
 			WHERE ws.workflow_id = $1 AND ws.step_order = 1 AND ws.condition = 'on_success'
@@ -283,10 +273,10 @@ func (s *service) TriggerDueCronWorkflows(ctx context.Context) ([]uuid.UUID, err
 			return nil, err
 		}
 
-		queryTask := `INSERT INTO tasks (workflow_run_id, workflow_step_id, payload_slug, payload, allocated_unit, status)
-			SELECT $1, $2, $3, $4, w.task_unit, 'queued'::task_status
-			FROM workers w WHERE w.slug = $3`
-		_, err = tx.Exec(ctx, queryTask, runID, stepID, slug, defaultPayload)
+		queryTask := `INSERT INTO tasks (workflow_run_id, workflow_step_id, workflow_id, payload_slug, payload, allocated_unit, status)
+			SELECT $1, $2, $3, $4::varchar, $5, w.task_unit, 'queued'::task_status
+			FROM workers w WHERE w.slug = $4::varchar`
+		_, err = tx.Exec(ctx, queryTask, runID, stepID, w.ID, slug, defaultPayload)
 		if err != nil {
 			return nil, err
 		}

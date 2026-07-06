@@ -95,6 +95,7 @@ type Task struct {
 	ID             uuid.UUID       `db:"id" json:"id"`
 	WorkflowRunID  *uuid.UUID      `db:"workflow_run_id" json:"workflow_run_id"`
 	WorkflowStepID *uuid.UUID      `db:"workflow_step_id" json:"workflow_step_id"`
+	WorkflowID     *uuid.UUID      `db:"workflow_id" json:"workflow_id"`
 	PayloadSlug    string          `db:"payload_slug" json:"payload_slug"`
 	Payload        json.RawMessage `db:"payload" json:"payload"`
 	RetryCount     *int            `db:"retry_count" json:"retry_count"`
@@ -104,6 +105,7 @@ type Task struct {
 	Status         TaskStatus      `db:"status" json:"status"`
 	AllocatedUnit  TaskUnit        `db:"allocated_unit" json:"allocated_unit"`
 	AssignedNodeID *string         `db:"assigned_node_id" json:"assigned_node_id"`
+	ChainTask      bool            `db:"chain_task" json:"chain_task"`
 	CreatedAt      time.Time       `db:"created_at" json:"created_at"`
 	UpdatedAt      time.Time       `db:"updated_at" json:"updated_at"`
 	DeletedAt      sql.NullTime    `db:"deleted_at" json:"deleted_at"`
@@ -132,12 +134,12 @@ type WorkflowRun struct {
 
 // WorkflowStep represents a step in a workflow
 type WorkflowStep struct {
-	ID             uuid.UUID        `db:"id" json:"id"`
-	WorkflowID     uuid.UUID        `db:"workflow_id" json:"workflow_id"`
-	Slug           string           `db:"slug" json:"slug"`
-	Condition      TriggerCondition `db:"condition" json:"condition"`
-	StepOrder      int              `db:"step_order" json:"step_order"`
-	DefaultPayload json.RawMessage  `db:"default_payload" json:"default_payload"`
+	ID         uuid.UUID        `db:"id" json:"id"`
+	WorkflowID uuid.UUID        `db:"workflow_id" json:"workflow_id"`
+	Slug       string           `db:"slug" json:"slug"`
+	Condition  TriggerCondition `db:"condition" json:"condition"`
+	StepOrder  int              `db:"step_order" json:"step_order"`
+	Payload    json.RawMessage  `db:"payload" json:"payload"`
 }
 
 // TaskChain represents follow-on execution links between tasks

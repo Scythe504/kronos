@@ -7,6 +7,7 @@ import (
 	"time"
 
 	_ "github.com/joho/godotenv/autoload"
+	"github.com/scythe504/kronos/internal/cron"
 	"github.com/scythe504/kronos/internal/database"
 	"github.com/scythe504/kronos/internal/nodes"
 	"github.com/scythe504/kronos/internal/pipeline"
@@ -29,14 +30,12 @@ func main() {
 	}
 	p := pipeline.Init(db)
 
-	go nodes.SendHeartbeat(db, ctx, id)
-	
-	for range 5 {
-		wg.Go(func() {
-			p.Start(ctx)
-		})
-	}
+	cronSched := cron.NewScheduler(db)
+	wg.Go(func() { cronSched.Start(ctx) })
 
+	wg.Go(func() { nodes.SendHeartbeat(db, ctx, id) })
+
+	wg.Go(func() { p.Start(ctx) })
 
 	wg.Wait()
 	// give in-flight tasks time to finish

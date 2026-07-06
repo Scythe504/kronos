@@ -10,18 +10,23 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	_ "github.com/joho/godotenv/autoload"
 	"github.com/pressly/goose/v3"
+	"path/filepath"
 )
 
 type Service interface {
 	GetTask(ctx context.Context, taskId string) (Task, error)
-	GetTasks(ctx context.Context, machineID string) ([]Task, error)
-	FailTask(ctx context.Context, id uuid.UUID, lastError json.RawMessage, timestamp time.Time) (uuid.UUID, error)
+	GetTasks(ctx context.Context, machineID string, taskUnit TaskUnit) ([]Task, error)
+	FailTask(ctx context.Context, id uuid.UUID, lastError json.RawMessage, timestamp time.Time) (uuid.UUID, uuid.UUID, error)
 	CompleteTask(ctx context.Context, id uuid.UUID, timestamp time.Time, outputPayload json.RawMessage) (uuid.UUID, uuid.UUID, error)
-	CreateTask(ctx context.Context, payloadSlug string, payload json.RawMessage, runID *uuid.UUID, stepID *uuid.UUID, unit *TaskUnit) (uuid.UUID, error)
+	CreateTask(ctx context.Context, payloadSlug string, payload json.RawMessage, runID *uuid.UUID, stepID *uuid.UUID, workflowID *uuid.UUID, unit *TaskUnit, chainTask bool) (uuid.UUID, error)
+	CreateTasks(ctx context.Context, tx pgx.Tx, tasks []Task) error
+	CreateTaskChains(ctx context.Context, tx pgx.Tx, chains []TaskChain) error
+	CreateTaskChain(ctx context.Context, steps []Step) ([]uuid.UUID, error)
 
 	// Workflow operations
 	CreateWorkflowTemplate(ctx context.Context, wp WorkflowPayload) (uuid.UUID, error)
@@ -40,11 +45,11 @@ type Service interface {
 }
 
 type service struct {
-	pool *pgxpool.Pool
+	pool  *pgxpool.Pool
+	dbURL string
 }
 
 var (
-	dbURL      = os.Getenv("DB_URL")
 	dbInstance *service
 )
 
@@ -53,6 +58,7 @@ func New(ctx context.Context) Service {
 		return dbInstance
 	}
 
+	dbURL := os.Getenv("DB_URL")
 	config, err := pgxpool.ParseConfig(dbURL)
 	if err != nil {
 		log.Fatalf("Parse config failed: %v", err)
@@ -71,7 +77,8 @@ func New(ctx context.Context) Service {
 	}
 
 	dbInstance = &service{
-		pool: pool,
+		pool:  pool,
+		dbURL: dbURL,
 	}
 
 	if err := dbInstance.migrate(); err != nil {
@@ -89,7 +96,15 @@ func (s *service) migrate() error {
 		return err
 	}
 
-	if err := goose.Up(db, "migrations"); err != nil {
+	migrationsDir := "migrations"
+	for range 5 {
+		if _, err := os.Stat(migrationsDir); err == nil {
+			break
+		}
+		migrationsDir = filepath.Join("..", migrationsDir)
+	}
+
+	if err := goose.Up(db, migrationsDir); err != nil {
 		return err
 	}
 
@@ -155,6 +170,6 @@ func (s *service) Health() map[string]string {
 // If the connection is successfully closed, it returns nil.
 // If an error occurs while closing the connection, it returns the error.
 func (s *service) Close() {
-	log.Printf("Disconnected from database: %s", dbURL)
+	log.Printf("Disconnected from database: %s", s.dbURL)
 	s.pool.Close()
 }

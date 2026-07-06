@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   id UUID PRIMARY KEY DEFAULT uuidv7(),
   workflow_run_id UUID REFERENCES workflow_runs(id) DEFAULT NULL,
   workflow_step_id UUID REFERENCES workflow_steps(id) DEFAULT NULL,
+  workflow_id UUID REFERENCES workflows(id) DEFAULT NULL,
   payload_slug VARCHAR(255) NOT NULL, -- REFERENCES workers(slug),
   payload JSONB NOT NULL DEFAULT '{}'::jsonb,
   retry_count INT DEFAULT 0,
@@ -13,6 +14,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   status task_status NOT NULL DEFAULT 'queued',
   allocated_unit task_unit NOT NULL DEFAULT 'cpu',
   assigned_node_id VARCHAR(64) DEFAULT NULL,
+  chain_task BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   deleted_at TIMESTAMPTZ DEFAULT null

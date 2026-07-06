@@ -21,7 +21,7 @@ func (p *Pipeline) Start(ctx context.Context) {
 		default:
 		}
 
-		tasks, err := p.db.GetTasks(ctx, machineID)
+		tasks, err := p.db.GetTasks(ctx, machineID, nodeCfg.TaskUnit)
 		if err != nil {
 			log.Println("ERR(Dispatcher): ", err)
 			time.Sleep(2 * time.Second)
