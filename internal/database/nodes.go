@@ -37,7 +37,6 @@ func (s *service) RegisterNode(ctx context.Context, n Node) (string, error) {
 		hostname = EXCLUDED.hostname,
 		task_unit = EXCLUDED.task_unit,
 		node_version = EXCLUDED.node_version,
-		status = 'idle'::node_status,
 		updated_at = now()
 	WHERE nodes.status != 'inactive'::node_status
 	RETURNING machine_id
