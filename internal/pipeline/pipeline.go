@@ -2,29 +2,61 @@ package pipeline
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os/exec"
 	"sync"
 
+	"github.com/google/uuid"
 	"github.com/scythe504/kronos/internal/database"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
+var pipelineTracer = otel.Tracer("kronos-pipeline")
+
 type Pipeline struct {
-	db       database.Service
-	registry Registry
+	db            database.Service
+	nodeID        string
+	registry      Registry
+	inFlightMu    sync.RWMutex
+	inFlightTasks map[uuid.UUID]context.Context
 }
 
-func Init(db database.Service) *Pipeline {
+func Init(db database.Service, nodeID string) *Pipeline {
 	pipeline := &Pipeline{
-		db: db,
+		db:     db,
+		nodeID: nodeID,
 		registry: Registry{
 			processes: make(map[string]*Pipe),
 			mu:        sync.RWMutex{},
 		},
+		inFlightTasks: make(map[uuid.UUID]context.Context),
 	}
 
 	return pipeline
+}
+
+func (p *Pipeline) AddInFlightTask(id uuid.UUID, ctx context.Context) {
+	p.inFlightMu.Lock()
+	defer p.inFlightMu.Unlock()
+	p.inFlightTasks[id] = ctx
+}
+
+func (p *Pipeline) GetInFlightTask(id uuid.UUID) (context.Context, bool) {
+	p.inFlightMu.RLock()
+	defer p.inFlightMu.RUnlock()
+	ctx, ok := p.inFlightTasks[id]
+	return ctx, ok
+}
+
+func (p *Pipeline) RemoveInFlightTask(id uuid.UUID) {
+	p.inFlightMu.Lock()
+	defer p.inFlightMu.Unlock()
+	delete(p.inFlightTasks, id)
 }
 
 type Pipe struct {
@@ -66,14 +98,20 @@ func (p *Pipeline) GetPipe(ctx context.Context, slug string) (*Pipe, error) {
 }
 
 func (p *Pipeline) StartWorkerProcess(ctx context.Context, slug string) (*Pipe, error) {
+	ctx, span := pipelineTracer.Start(ctx, "StartWorkerProcess")
+	defer span.End()
+	span.SetAttributes(attribute.String("slug", slug))
+
+	slog.InfoContext(ctx, "Spawning worker process", slog.String("slug", slug))
+
 	cmdPath := ""
 	switch slug {
-	case "video_transcode":
-		cmdPath = "./examples/transcoder/main.go"
-	case "csv_to_pdf":
-		cmdPath = "./examples/csv-pdf/main.go"
+	case "csv-pdf", "csv_to_pdf":
+		cmdPath = "examples/csv-pdf/main.go"
+	case "transcoder":
+		cmdPath = "examples/transcoder/main.go"
 	default:
-		return nil, fmt.Errorf("unhandled worker slug: %s", slug)
+		return nil, fmt.Errorf("unknown task slug: %s", slug)
 	}
 
 	cmd := exec.Command("go", "run", cmdPath)
@@ -81,10 +119,12 @@ func (p *Pipeline) StartWorkerProcess(ctx context.Context, slug string) (*Pipe, 
 	if err != nil {
 		return nil, err
 	}
+
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, err
 	}
+
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		return nil, err
@@ -99,10 +139,16 @@ func (p *Pipeline) StartWorkerProcess(ctx context.Context, slug string) (*Pipe, 
 
 	// Asynchronously wait to reap the process status and prevent zombie processes
 	go func() {
-		_ = cmd.Wait()
+		err := cmd.Wait()
 		p.registry.mu.Lock()
 		delete(p.registry.processes, slug)
 		p.registry.mu.Unlock()
+
+		if err != nil {
+			slog.ErrorContext(ctx, "Worker process exited with error", slog.String("slug", slug), slog.Any("error", err))
+		} else {
+			slog.InfoContext(ctx, "Worker process exited successfully", slog.String("slug", slug))
+		}
 	}()
 
 	return &Pipe{
@@ -113,11 +159,27 @@ func (p *Pipeline) StartWorkerProcess(ctx context.Context, slug string) (*Pipe, 
 }
 
 func (p *Pipeline) Enqueue(ctx context.Context, slug string, payload []byte) error {
+	ctx, span := pipelineTracer.Start(ctx, "EnqueueTask")
+	defer span.End()
+
 	pipe, err := p.GetPipe(ctx, slug)
 	if err != nil {
 		return fmt.Errorf("no worker process found for slug: %s", slug)
 	}
 
+	spanCtx := trace.SpanContextFromContext(ctx)
+	if spanCtx.IsValid() {
+		traceparent := fmt.Sprintf("00-%s-%s-%s", spanCtx.TraceID(), spanCtx.SpanID(), spanCtx.TraceFlags())
+		var data map[string]any
+		if err := json.Unmarshal(payload, &data); err == nil {
+			data["traceparent"] = traceparent
+			if updatedPayload, err := json.Marshal(data); err == nil {
+				payload = updatedPayload
+			}
+		}
+	}
+
+	payload = append(payload, '\n')
 	pipe.writeMu.Lock()
 	defer pipe.writeMu.Unlock()
 	_, err = pipe.Stdin.Write(payload)

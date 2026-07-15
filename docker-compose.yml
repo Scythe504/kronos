@@ -12,56 +12,19 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
 
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: kronos_prometheus
-    restart: always
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
-    ports:
-      - "9090:9090"
-
-  tempo:
-    image: grafana/tempo:latest
-    container_name: kronos_tempo
-    restart: always
-    command: [ "-config.file=/etc/tempo.yaml" ]
-    volumes:
-      - ./tempo.yml:/etc/tempo.yaml
-    ports:
-      - "3200:3200"
-
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:latest
-    container_name: kronos_otel_collector
-    restart: always
-    command: [ "--config=/etc/otel-collector-config.yaml" ]
-    volumes:
-      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
-    ports:
-      - "4317:4317" # OTLP gRPC receiver
-      - "4318:4318" # OTLP HTTP receiver
-    depends_on:
-      - prometheus
-      - tempo
-
-  grafana:
-    image: grafana/grafana:latest
-    container_name: kronos_grafana
+  otel-lgtm:
+    image: grafana/otel-lgtm:latest
+    container_name: kronos_otel_lgtm
     restart: always
     ports:
-      - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_USERS_ALLOW_SIGN_UP=false
+      - "3000:3000" # Grafana UI
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
     volumes:
-      - grafana_data:/var/lib/grafana
-    depends_on:
-      - prometheus
-      - tempo
+      - lgtm_data:/data
 
 volumes:
   postgres_data:
-  grafana_data:
+  lgtm_data:

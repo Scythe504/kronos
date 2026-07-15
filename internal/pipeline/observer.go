@@ -4,14 +4,14 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"time"
 )
 
 func (p *Pipeline) ObserveProcessStdout(ctx context.Context, slug string) {
 	pipe, err := p.GetPipe(ctx, slug)
 	if err != nil {
-		log.Println("ERR(ObserveProcessStdout):", err)
+		slog.ErrorContext(ctx, "Failed to get stdout pipe", slog.String("slug", slug), slog.Any("error", err))
 		return
 	}
 	scanner := bufio.NewScanner(pipe.Stdout)
@@ -19,7 +19,7 @@ func (p *Pipeline) ObserveProcessStdout(ctx context.Context, slug string) {
 		go p.ResultHandler(ctx, json.RawMessage(scanner.Text()))
 	}
 	if err := scanner.Err(); err != nil {
-		log.Println("ERR(ObserveProcessStdout):", err)
+		slog.ErrorContext(ctx, "Error scanning stdout", slog.String("slug", slug), slog.Any("error", err))
 		return
 	}
 }
@@ -27,15 +27,15 @@ func (p *Pipeline) ObserveProcessStdout(ctx context.Context, slug string) {
 func (p *Pipeline) ObserveProcessStderr(ctx context.Context, slug string) {
 	pipe, err := p.GetPipe(ctx, slug)
 	if err != nil {
-		log.Println("ERR(ObserveProcessStderr):", err)
+		slog.ErrorContext(ctx, "Failed to get stderr pipe", slog.String("slug", slug), slog.Any("error", err))
 		return
 	}
 	scanner := bufio.NewScanner(pipe.Stderr)
 	for scanner.Scan() {
-		log.Println("ERR(ScanningStderr)", scanner.Text())
+		slog.ErrorContext(ctx, "Worker Stderr output", slog.String("slug", slug), slog.String("output", scanner.Text()))
 	}
 	if err := scanner.Err(); err != nil {
-		log.Println("ERR(ObserveProcessStderr):", err)
+		slog.ErrorContext(ctx, "Error scanning stderr", slog.String("slug", slug), slog.Any("error", err))
 		return
 	}
 }
@@ -44,19 +44,32 @@ func (p *Pipeline) ObserveProcessStderr(ctx context.Context, slug string) {
 func (p *Pipeline) ResultHandler(ctx context.Context, rawRes json.RawMessage) {
 	var wr WorkerResult
 	if err := json.Unmarshal(rawRes, &wr); err != nil {
-		log.Println("ERR(UnmarshalingWorkerResult)", err, string(rawRes))
+		slog.ErrorContext(ctx, "Failed to unmarshal worker result payload", slog.String("payload", string(rawRes)), slog.Any("error", err))
 		return
 	}
 	wr.Timestamp = time.Now()
 
+	taskCtx, ok := p.GetInFlightTask(wr.TaskID)
+	if !ok {
+		taskCtx = ctx
+	} else {
+		if wr.ResultMessage != WorkerResultACKMessage {
+			p.RemoveInFlightTask(wr.TaskID)
+		}
+	}
+
 	switch wr.ResultMessage {
 	case WorkerResultSuccessMesssage:
-		p.db.CompleteTask(ctx, wr.TaskID, wr.Timestamp, wr.Output)
+		slog.InfoContext(taskCtx, "Task execution succeeded", slog.String("task_id", wr.TaskID.String()))
+		p.db.CompleteTask(taskCtx, wr.TaskID, wr.Timestamp, wr.Output)
 	case WorkerResultFailedMessage:
-		p.db.FailTask(ctx, wr.TaskID, wr.Error, wr.Timestamp)
+		slog.ErrorContext(taskCtx, "Task execution failed", slog.String("task_id", wr.TaskID.String()), slog.String("error", string(wr.Error)))
+		p.db.FailTask(taskCtx, wr.TaskID, wr.Error, wr.Timestamp)
 	case WorkerResultACKTimeoutMessage:
-		p.db.FailTask(ctx, wr.TaskID, []byte(`{"error": "worker process failed to acknowledge tasks"}`), wr.Timestamp)
+		slog.ErrorContext(taskCtx, "Task execution timed out (ACK timeout)", slog.String("task_id", wr.TaskID.String()))
+		p.db.FailTask(taskCtx, wr.TaskID, []byte(`{"error": "worker process failed to acknowledge tasks"}`), wr.Timestamp)
 	case WorkerResultACKMessage:
+		slog.InfoContext(taskCtx, "Task execution acknowledged by worker", slog.String("task_id", wr.TaskID.String()))
 		return
 	}
 }

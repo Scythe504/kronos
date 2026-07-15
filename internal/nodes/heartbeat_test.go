@@ -11,14 +11,14 @@ import (
 
 type mockDB struct {
 	database.Service
-	onHeartbeat func(ctx context.Context, machineID string) (string, error)
+	onHeartbeat func(ctx context.Context, nodeID string) (string, error)
 }
 
-func (m *mockDB) UpdateNodeLastHBeat(ctx context.Context, machineID string) (string, error) {
+func (m *mockDB) UpdateNodeLastHBeat(ctx context.Context, nodeID string) (string, error) {
 	if m.onHeartbeat != nil {
-		return m.onHeartbeat(ctx, machineID)
+		return m.onHeartbeat(ctx, nodeID)
 	}
-	return machineID, nil
+	return nodeID, nil
 }
 
 func TestSendHeartbeat(t *testing.T) {
@@ -28,10 +28,10 @@ func TestSendHeartbeat(t *testing.T) {
 
 	var heartbeatCount int32
 	mock := &mockDB{
-		onHeartbeat: func(ctx context.Context, machineID string) (string, error) {
+		onHeartbeat: func(ctx context.Context, nodeID string) (string, error) {
 			atomic.AddInt32(&heartbeatCount, 1)
 			cancel() // Cancel the timeout context early to speed up the test
-			return machineID, nil
+			return nodeID, nil
 		},
 	}
 

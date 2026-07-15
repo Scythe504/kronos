@@ -10,7 +10,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
+
+var tracer = otel.Tracer("kronos-database")
 
 func (s *service) GetTask(ctx context.Context, taskId string) (Task, error) {
 	query := `SELECT
@@ -31,6 +35,12 @@ func (s *service) GetTask(ctx context.Context, taskId string) (Task, error) {
 }
 
 func (s *service) GetTasks(ctx context.Context, machineID string, taskUnit TaskUnit) ([]Task, error) {
+	ctx, span := tracer.Start(ctx, "GetTasks")
+	defer span.End()
+	span.SetAttributes(
+		attribute.String("machine_id", machineID),
+		attribute.String("task_unit", string(taskUnit)),
+	)
 	query := `UPDATE tasks
 			SET status = $1, assigned_node_id = $2, updated_at = now()
 			WHERE id IN (
@@ -175,6 +185,11 @@ func (s *service) progressWorkflowStep(ctx context.Context, tx pgx.Tx, completed
 }
 
 func (s *service) CompleteTask(ctx context.Context, id uuid.UUID, timestamp time.Time, outputPayload json.RawMessage) (uuid.UUID, uuid.UUID, error) {
+	ctx, span := tracer.Start(ctx, "CompleteTask")
+	defer span.End()
+	span.SetAttributes(
+		attribute.String("task_id", id.String()),
+	)
 	query := `UPDATE tasks
 		SET status = $1, updated_at = $2
 		WHERE id = $3 AND status NOT IN ('completed', 'failed') AND deleted_at IS NULL
@@ -246,6 +261,11 @@ func (s *service) CompleteTask(ctx context.Context, id uuid.UUID, timestamp time
 }
 
 func (s *service) FailTask(ctx context.Context, id uuid.UUID, lastError json.RawMessage, timestamp time.Time) (uuid.UUID, uuid.UUID, error) {
+	ctx, span := tracer.Start(ctx, "FailTask")
+	defer span.End()
+	span.SetAttributes(
+		attribute.String("task_id", id.String()),
+	)
 	query := `UPDATE tasks
 		SET retry_count = COALESCE(retry_count, 0) + 1,
 		status = CASE
@@ -414,6 +434,11 @@ func (s *service) CreateTaskChains(ctx context.Context, tx pgx.Tx, chains []Task
 }
 
 func (s *service) CreateTaskChain(ctx context.Context, steps []Step) ([]uuid.UUID, error) {
+	ctx, span := tracer.Start(ctx, "CreateTaskChain")
+	defer span.End()
+	span.SetAttributes(
+		attribute.Int("steps_count", len(steps)),
+	)
 	opts := pgx.TxOptions{
 		IsoLevel:       pgx.ReadCommitted,
 		AccessMode:     pgx.ReadWrite,

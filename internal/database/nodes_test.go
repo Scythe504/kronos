@@ -30,34 +30,38 @@ func TestNodeLifecycle(t *testing.T) {
 		NodeVersion:   "v1.0.0",
 	}
 
+	var nodeID string
+
 	t.Run("Register Node", func(t *testing.T) {
 		regID, err := dbService.RegisterNode(ctx, node)
 		assert.NoError(t, err)
-		assert.Equal(t, machineID, regID)
+		assert.NotEmpty(t, regID)
+		nodeID = regID
 
-		n, err := dbService.GetNode(ctx, machineID)
+		n, err := dbService.GetNode(ctx, nodeID)
 		assert.NoError(t, err)
+		assert.Equal(t, nodeID, n.ID.String())
 		assert.Equal(t, machineID, n.MachineID)
 		assert.Equal(t, NodeStatusIdle, n.Status)
 		assert.Equal(t, "Intel i9-13900K", n.CPUModel)
 	})
 
 	t.Run("Update Heartbeat", func(t *testing.T) {
-		res, err := dbService.UpdateNodeLastHBeat(ctx, machineID)
+		res, err := dbService.UpdateNodeLastHBeat(ctx, nodeID)
 		assert.NoError(t, err)
-		assert.Equal(t, machineID, res)
+		assert.Equal(t, nodeID, res)
 
-		n, err := dbService.GetNode(ctx, machineID)
+		n, err := dbService.GetNode(ctx, nodeID)
 		assert.NoError(t, err)
 		assert.NotZero(t, n.LastHeartbeatAt)
 	})
 
 	t.Run("Update Status", func(t *testing.T) {
-		res, err := dbService.UpdateNodeStatus(ctx, machineID, NodeStatusInactive)
+		res, err := dbService.UpdateNodeStatus(ctx, nodeID, NodeStatusInactive)
 		assert.NoError(t, err)
-		assert.Equal(t, machineID, res)
+		assert.Equal(t, nodeID, res)
 
-		n, err := dbService.GetNode(ctx, machineID)
+		n, err := dbService.GetNode(ctx, nodeID)
 		assert.NoError(t, err)
 		assert.Equal(t, NodeStatusInactive, n.Status)
 	})
@@ -66,6 +70,6 @@ func TestNodeLifecycle(t *testing.T) {
 		nodes, err := dbService.GetNodes(ctx, 1, 10)
 		assert.NoError(t, err)
 		assert.Len(t, nodes, 1)
-		assert.Equal(t, machineID, nodes[0].MachineID)
+		assert.Equal(t, nodeID, nodes[0].ID.String())
 	})
 }

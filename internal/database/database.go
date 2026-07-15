@@ -34,11 +34,12 @@ type Service interface {
 	TriggerWorkflow(ctx context.Context, workflowID uuid.UUID) (uuid.UUID, error)
 	TriggerDueCronWorkflows(ctx context.Context) ([]uuid.UUID, error)
 
+	// Node operations
 	RegisterNode(ctx context.Context, n Node) (string, error)
-	UpdateNodeStatus(ctx context.Context, machineID string, status NodeStatus) (string, error)
-	GetNode(ctx context.Context, machineID string) (Node, error)
+	UpdateNodeStatus(ctx context.Context, nodeID string, status NodeStatus) (string, error)
+	GetNode(ctx context.Context, nodeID string) (Node, error)
 	GetNodes(ctx context.Context, page int, perPage int) ([]Node, error)
-	UpdateNodeLastHBeat(ctx context.Context, machineID string) (string, error)
+	UpdateNodeLastHBeat(ctx context.Context, nodeID string) (string, error)
 
 	Health() map[string]string
 	Close()

@@ -20,11 +20,10 @@ type TelemetryProvider interface {
 	LogInfo(msg string, args ...any)
 	LogErrorln(msg string, args ...any)
 	LogFatalln(msg string, args ...any)
+	MeterInt64Counter(metric Metric) (otelmetric.Int64Counter, error)
 	MeterInt64Histogram(metric Metric) (otelmetric.Int64Histogram, error)
 	MeterInt64UpDownCounter(metric Metric) (otelmetric.Int64UpDownCounter, error)
 	TraceStart(ctx context.Context, name string) (context.Context, oteltrace.Span)
-	// LogRequest() http.HandlerFunc
-	// MeterRequestDuration() http.HandlerFunc
 	Shutdown(ctx context.Context)
 }
 
@@ -55,6 +54,7 @@ func NewTelemetry(ctx context.Context, cfg Config) (*Telemetry, error) {
 	logger := slog.New(
 		slog.NewMultiHandler(jsonHandler, otelHandler),
 	)
+	slog.SetDefault(logger)
 
 	mp, err := newMeterProvider(ctx, rp)
 	if err != nil {
@@ -95,6 +95,20 @@ func (t *Telemetry) LogErrorln(msg string, args ...any) {
 func (t *Telemetry) LogFatalln(msg string, args ...any) {
 	t.log.Error(msg, args...)
 	os.Exit(1)
+}
+
+func (t *Telemetry) MeterInt64Counter(metric Metric) (otelmetric.Int64Counter, error) {
+	counter, err := t.meter.Int64Counter(
+		metric.Name,
+		otelmetric.WithDescription(metric.Description),
+		otelmetric.WithUnit(metric.Unit),
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create counter: %w", err)
+	}
+
+	return counter, nil
 }
 
 func (t *Telemetry) MeterInt64Histogram(metric Metric) (otelmetric.Int64Histogram, error) {

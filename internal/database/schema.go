@@ -70,6 +70,7 @@ type Worker struct {
 
 // Node represents a compute node registered with the cluster
 type Node struct {
+	ID              *uuid.UUID `db:"id" json:"id"`
 	MachineID       string     `db:"machine_id" json:"machine_id"`
 	Kernel          string     `db:"kernel" json:"kernel"`
 	Architecture    string     `db:"architecture" json:"architecture"`
