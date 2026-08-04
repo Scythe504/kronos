@@ -5,36 +5,61 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"os/exec"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/scythe504/kronos/internal/database"
-	"go.opentelemetry.io/otel"
+	"github.com/scythe504/kronos/internal/telemetry"
 	"go.opentelemetry.io/otel/attribute"
+	otelmetric "go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 )
 
-var pipelineTracer = otel.Tracer("kronos-pipeline")
-
-type Pipeline struct {
-	db            database.Service
-	nodeID        string
-	registry      Registry
-	inFlightMu    sync.RWMutex
-	inFlightTasks map[uuid.UUID]context.Context
+type TaskMeta struct {
+	Ctx       context.Context
+	StartTime time.Time
 }
 
-func Init(db database.Service, nodeID string) *Pipeline {
+type Pipeline struct {
+	db                        database.Service
+	nodeID                    string
+	tel                       telemetry.TelemetryProvider
+	registry                  Registry
+	inFlightMu                sync.RWMutex
+	inFlightTasks             map[uuid.UUID]TaskMeta
+	tasksFailedCounter        otelmetric.Int64Counter
+	taskRetriesCounter        otelmetric.Int64Counter
+	activeWorkersCounter      otelmetric.Int64UpDownCounter
+	taskExecutionDurationHist otelmetric.Int64Histogram
+	taskQueueDurationHist     otelmetric.Int64Histogram
+	workerSpawnDurationHist   otelmetric.Int64Histogram
+}
+
+func Init(db database.Service, nodeID string, tel telemetry.TelemetryProvider) *Pipeline {
+	tasksFailedCounter, _ := tel.MeterInt64Counter(telemetry.MetricTasksFailed)
+	taskRetriesCounter, _ := tel.MeterInt64Counter(telemetry.MetricTaskRetries)
+	activeWorkersCounter, _ := tel.MeterInt64UpDownCounter(telemetry.MetricActiveWorkers)
+	taskExecutionDurationHist, _ := tel.MeterInt64Histogram(telemetry.MetricTaskExecutionDuration)
+	taskQueueDurationHist, _ := tel.MeterInt64Histogram(telemetry.MetricTaskQueueDuration)
+	workerSpawnDurationHist, _ := tel.MeterInt64Histogram(telemetry.MetricWorkerSpawnDuration)
+
 	pipeline := &Pipeline{
-		db:     db,
-		nodeID: nodeID,
+		db:                        db,
+		nodeID:                    nodeID,
+		tel:                       tel,
+		tasksFailedCounter:        tasksFailedCounter,
+		taskRetriesCounter:        taskRetriesCounter,
+		activeWorkersCounter:      activeWorkersCounter,
+		taskExecutionDurationHist: taskExecutionDurationHist,
+		taskQueueDurationHist:     taskQueueDurationHist,
+		workerSpawnDurationHist:   workerSpawnDurationHist,
 		registry: Registry{
 			processes: make(map[string]*Pipe),
 			mu:        sync.RWMutex{},
 		},
-		inFlightTasks: make(map[uuid.UUID]context.Context),
+		inFlightTasks: make(map[uuid.UUID]TaskMeta),
 	}
 
 	return pipeline
@@ -43,14 +68,17 @@ func Init(db database.Service, nodeID string) *Pipeline {
 func (p *Pipeline) AddInFlightTask(id uuid.UUID, ctx context.Context) {
 	p.inFlightMu.Lock()
 	defer p.inFlightMu.Unlock()
-	p.inFlightTasks[id] = ctx
+	p.inFlightTasks[id] = TaskMeta{
+		Ctx:       ctx,
+		StartTime: time.Now(),
+	}
 }
 
-func (p *Pipeline) GetInFlightTask(id uuid.UUID) (context.Context, bool) {
+func (p *Pipeline) GetInFlightTask(id uuid.UUID) (TaskMeta, bool) {
 	p.inFlightMu.RLock()
 	defer p.inFlightMu.RUnlock()
-	ctx, ok := p.inFlightTasks[id]
-	return ctx, ok
+	meta, ok := p.inFlightTasks[id]
+	return meta, ok
 }
 
 func (p *Pipeline) RemoveInFlightTask(id uuid.UUID) {
@@ -98,11 +126,12 @@ func (p *Pipeline) GetPipe(ctx context.Context, slug string) (*Pipe, error) {
 }
 
 func (p *Pipeline) StartWorkerProcess(ctx context.Context, slug string) (*Pipe, error) {
-	ctx, span := pipelineTracer.Start(ctx, "StartWorkerProcess")
+	spawnStartTime := time.Now()
+	ctx, span := p.tel.TraceStart(ctx, "StartWorkerProcess")
 	defer span.End()
 	span.SetAttributes(attribute.String("slug", slug))
 
-	slog.InfoContext(ctx, "Spawning worker process", slog.String("slug", slug))
+	p.tel.LogInfo(ctx, "Spawning worker process", "slug", slug)
 
 	cmdPath := ""
 	switch slug {
@@ -134,6 +163,21 @@ func (p *Pipeline) StartWorkerProcess(ctx context.Context, slug string) (*Pipe, 
 		return nil, err
 	}
 
+	spawnDurationMs := time.Since(spawnStartTime).Milliseconds()
+	if p.workerSpawnDurationHist != nil {
+		p.workerSpawnDurationHist.Record(ctx, spawnDurationMs, otelmetric.WithAttributes(
+			attribute.String("slug", slug),
+			attribute.String("node_id", p.nodeID),
+		))
+	}
+
+	if p.activeWorkersCounter != nil {
+		p.activeWorkersCounter.Add(ctx, 1, otelmetric.WithAttributes(
+			attribute.String("slug", slug),
+			attribute.String("node_id", p.nodeID),
+		))
+	}
+
 	go p.ObserveProcessStdout(ctx, slug)
 	go p.ObserveProcessStderr(ctx, slug)
 
@@ -144,10 +188,17 @@ func (p *Pipeline) StartWorkerProcess(ctx context.Context, slug string) (*Pipe, 
 		delete(p.registry.processes, slug)
 		p.registry.mu.Unlock()
 
+		if p.activeWorkersCounter != nil {
+			p.activeWorkersCounter.Add(ctx, -1, otelmetric.WithAttributes(
+				attribute.String("slug", slug),
+				attribute.String("node_id", p.nodeID),
+			))
+		}
+
 		if err != nil {
-			slog.ErrorContext(ctx, "Worker process exited with error", slog.String("slug", slug), slog.Any("error", err))
+			p.tel.LogErrorln(ctx, "Worker process exited with error", "slug", slug, "error", err.Error())
 		} else {
-			slog.InfoContext(ctx, "Worker process exited successfully", slog.String("slug", slug))
+			p.tel.LogInfo(ctx, "Worker process exited successfully", "slug", slug)
 		}
 	}()
 
@@ -159,7 +210,7 @@ func (p *Pipeline) StartWorkerProcess(ctx context.Context, slug string) (*Pipe, 
 }
 
 func (p *Pipeline) Enqueue(ctx context.Context, slug string, payload []byte) error {
-	ctx, span := pipelineTracer.Start(ctx, "EnqueueTask")
+	ctx, span := p.tel.TraceStart(ctx, "EnqueueTask")
 	defer span.End()
 
 	pipe, err := p.GetPipe(ctx, slug)

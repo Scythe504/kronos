@@ -4,14 +4,16 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"log/slog"
 	"time"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 func (p *Pipeline) ObserveProcessStdout(ctx context.Context, slug string) {
 	pipe, err := p.GetPipe(ctx, slug)
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to get stdout pipe", slog.String("slug", slug), slog.Any("error", err))
+		p.tel.LogErrorln(ctx, "Failed to get stdout pipe", "slug", slug, "error", err.Error())
 		return
 	}
 	scanner := bufio.NewScanner(pipe.Stdout)
@@ -19,7 +21,7 @@ func (p *Pipeline) ObserveProcessStdout(ctx context.Context, slug string) {
 		go p.ResultHandler(ctx, json.RawMessage(scanner.Text()))
 	}
 	if err := scanner.Err(); err != nil {
-		slog.ErrorContext(ctx, "Error scanning stdout", slog.String("slug", slug), slog.Any("error", err))
+		p.tel.LogErrorln(ctx, "Error scanning stdout", "slug", slug, "error", err.Error())
 		return
 	}
 }
@@ -27,15 +29,15 @@ func (p *Pipeline) ObserveProcessStdout(ctx context.Context, slug string) {
 func (p *Pipeline) ObserveProcessStderr(ctx context.Context, slug string) {
 	pipe, err := p.GetPipe(ctx, slug)
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to get stderr pipe", slog.String("slug", slug), slog.Any("error", err))
+		p.tel.LogErrorln(ctx, "Failed to get stderr pipe", "slug", slug, "error", err.Error())
 		return
 	}
 	scanner := bufio.NewScanner(pipe.Stderr)
 	for scanner.Scan() {
-		slog.ErrorContext(ctx, "Worker Stderr output", slog.String("slug", slug), slog.String("output", scanner.Text()))
+		p.tel.LogErrorln(ctx, "Worker Stderr output", "slug", slug, "output", scanner.Text())
 	}
 	if err := scanner.Err(); err != nil {
-		slog.ErrorContext(ctx, "Error scanning stderr", slog.String("slug", slug), slog.Any("error", err))
+		p.tel.LogErrorln(ctx, "Error scanning stderr", "slug", slug, "error", err.Error())
 		return
 	}
 }
@@ -44,15 +46,23 @@ func (p *Pipeline) ObserveProcessStderr(ctx context.Context, slug string) {
 func (p *Pipeline) ResultHandler(ctx context.Context, rawRes json.RawMessage) {
 	var wr WorkerResult
 	if err := json.Unmarshal(rawRes, &wr); err != nil {
-		slog.ErrorContext(ctx, "Failed to unmarshal worker result payload", slog.String("payload", string(rawRes)), slog.Any("error", err))
+		p.tel.LogErrorln(ctx, "Failed to unmarshal worker result payload", "payload", string(rawRes), "error", err.Error())
 		return
 	}
 	wr.Timestamp = time.Now()
 
-	taskCtx, ok := p.GetInFlightTask(wr.TaskID)
+	taskMeta, ok := p.GetInFlightTask(wr.TaskID)
+	var taskCtx context.Context
 	if !ok {
 		taskCtx = ctx
 	} else {
+		taskCtx = taskMeta.Ctx
+		if p.taskExecutionDurationHist != nil && !taskMeta.StartTime.IsZero() {
+			execDurationMs := time.Since(taskMeta.StartTime).Milliseconds()
+			p.taskExecutionDurationHist.Record(taskCtx, execDurationMs, metric.WithAttributes(
+				attribute.String("task_id", wr.TaskID.String()),
+			))
+		}
 		if wr.ResultMessage != WorkerResultACKMessage {
 			p.RemoveInFlightTask(wr.TaskID)
 		}
@@ -60,16 +70,31 @@ func (p *Pipeline) ResultHandler(ctx context.Context, rawRes json.RawMessage) {
 
 	switch wr.ResultMessage {
 	case WorkerResultSuccessMesssage:
-		slog.InfoContext(taskCtx, "Task execution succeeded", slog.String("task_id", wr.TaskID.String()))
+		p.tel.LogInfo(taskCtx, "Task execution succeeded", "task_id", wr.TaskID.String())
 		p.db.CompleteTask(taskCtx, wr.TaskID, wr.Timestamp, wr.Output)
 	case WorkerResultFailedMessage:
-		slog.ErrorContext(taskCtx, "Task execution failed", slog.String("task_id", wr.TaskID.String()), slog.String("error", string(wr.Error)))
-		p.db.FailTask(taskCtx, wr.TaskID, wr.Error, wr.Timestamp)
+		p.tel.LogErrorln(taskCtx, "Task execution failed", "task_id", wr.TaskID.String(), "error", string(wr.Error))
+		if p.tasksFailedCounter != nil {
+			p.tasksFailedCounter.Add(taskCtx, 1, metric.WithAttributes(
+				attribute.String("task_id", wr.TaskID.String()),
+			))
+		}
+		_, _, err := p.db.FailTask(taskCtx, wr.TaskID, wr.Error, wr.Timestamp)
+		if err == nil && p.taskRetriesCounter != nil {
+			p.taskRetriesCounter.Add(taskCtx, 1, metric.WithAttributes(
+				attribute.String("task_id", wr.TaskID.String()),
+			))
+		}
 	case WorkerResultACKTimeoutMessage:
-		slog.ErrorContext(taskCtx, "Task execution timed out (ACK timeout)", slog.String("task_id", wr.TaskID.String()))
+		p.tel.LogErrorln(taskCtx, "Task execution timed out (ACK timeout)", "task_id", wr.TaskID.String())
+		if p.tasksFailedCounter != nil {
+			p.tasksFailedCounter.Add(taskCtx, 1, metric.WithAttributes(
+				attribute.String("task_id", wr.TaskID.String()),
+			))
+		}
 		p.db.FailTask(taskCtx, wr.TaskID, []byte(`{"error": "worker process failed to acknowledge tasks"}`), wr.Timestamp)
 	case WorkerResultACKMessage:
-		slog.InfoContext(taskCtx, "Task execution acknowledged by worker", slog.String("task_id", wr.TaskID.String()))
+		p.tel.LogInfo(taskCtx, "Task execution acknowledged by worker", "task_id", wr.TaskID.String())
 		return
 	}
 }

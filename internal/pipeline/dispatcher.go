@@ -3,27 +3,21 @@ package pipeline
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/scythe504/kronos/internal/database"
 	"github.com/scythe504/kronos/internal/nodes"
 	"github.com/scythe504/kronos/internal/telemetry"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 )
 
-var tracer = otel.Tracer("kronos-pipeline")
-
 func (p *Pipeline) Start(ctx context.Context) {
 	nodeCfg := nodes.GetNodeConfig(ctx)
-	meter := otel.Meter("kronos-pipeline")
-	tasksPulledCounter, _ := meter.Int64Counter(
-		telemetry.MetricTasksPulled.Name,
-		metric.WithDescription(telemetry.MetricTasksPulled.Description),
-		metric.WithUnit(telemetry.MetricTasksPulled.Unit),
-	)
+	tasksPulledCounter, err := p.tel.MeterInt64Counter(telemetry.MetricTasksPulled)
+	if err != nil {
+		p.tel.LogFatalln(ctx, "Failed to initialize tasks pulled counter", "error", err.Error())
+	}
 
 	pollCount := 1
 
@@ -35,10 +29,9 @@ func (p *Pipeline) Start(ctx context.Context) {
 		}
 
 		var tasks []database.Task
-		var err error
 
 		func() {
-			pollCtx, span := tracer.Start(ctx, "PollTasks")
+			pollCtx, span := p.tel.TraceStart(ctx, "PollTasks")
 			defer span.End()
 			span.SetAttributes(
 				attribute.String("node_id", p.nodeID),
@@ -47,12 +40,12 @@ func (p *Pipeline) Start(ctx context.Context) {
 
 			tasks, err = p.db.GetTasks(pollCtx, p.nodeID, nodeCfg.TaskUnit)
 			if err != nil {
-				slog.ErrorContext(pollCtx, "Failed to poll tasks from database", slog.Any("error", err))
+				p.tel.LogErrorln(pollCtx, "Failed to poll tasks from database", "error", err.Error())
 				return
 			}
 
 			if len(tasks) > 0 {
-				slog.InfoContext(pollCtx, "Successfully leased tasks from queue", slog.Int("count", len(tasks)))
+				p.tel.LogInfo(pollCtx, "Successfully leased tasks from queue", "count", len(tasks))
 				tasksPulledCounter.Add(pollCtx, int64(len(tasks)), metric.WithAttributes(
 					attribute.String("node_id", p.nodeID),
 					attribute.String("task_unit", string(nodeCfg.TaskUnit)),
@@ -75,8 +68,17 @@ func (p *Pipeline) Start(ctx context.Context) {
 		pollCount = 1
 		for _, task := range tasks {
 			task := task
+
+			if p.taskQueueDurationHist != nil && !task.CreatedAt.IsZero() {
+				queueDurationMs := time.Since(task.CreatedAt).Milliseconds()
+				p.taskQueueDurationHist.Record(ctx, queueDurationMs, metric.WithAttributes(
+					attribute.String("task_slug", task.PayloadSlug),
+					attribute.String("node_id", p.nodeID),
+				))
+			}
+
 			go func() {
-				taskCtx, span := tracer.Start(ctx, fmt.Sprintf("ExecuteTask:%s", task.PayloadSlug))
+				taskCtx, span := p.tel.TraceStart(ctx, fmt.Sprintf("ExecuteTask:%s", task.PayloadSlug))
 				defer span.End()
 				span.SetAttributes(
 					attribute.String("task_id", task.ID.String()),
@@ -86,13 +88,13 @@ func (p *Pipeline) Start(ctx context.Context) {
 
 				adapted, err := AdaptTask(task)
 				if err != nil {
-					slog.ErrorContext(taskCtx, "Failed to adapt task payload", slog.String("task_id", task.ID.String()), slog.Any("error", err))
+					p.tel.LogErrorln(taskCtx, "Failed to adapt task payload", "task_id", task.ID.String(), "error", err.Error())
 					return
 				}
 
 				p.AddInFlightTask(task.ID, taskCtx)
 				if err := p.Enqueue(taskCtx, task.PayloadSlug, adapted); err != nil {
-					slog.ErrorContext(taskCtx, "Failed to enqueue task to worker pipeline", slog.String("task_id", task.ID.String()), slog.Any("error", err))
+					p.tel.LogErrorln(taskCtx, "Failed to enqueue task to worker pipeline", "task_id", task.ID.String(), "error", err.Error())
 					p.RemoveInFlightTask(task.ID)
 				}
 			}()

@@ -36,3 +36,4 @@ data
 .antigravitycli
 run_worker.sh
 .node_id
+/bin/
