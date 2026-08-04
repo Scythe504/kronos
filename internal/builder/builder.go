@@ -81,60 +81,23 @@ func resolveGitCredentials(envVars []byte) (string, string) {
 	return "", ""
 }
 
-// BuildWorker clones the worker repository and builds a container image using the Pack SDK or Dockerfile.
-func BuildWorker(ctx context.Context, worker database.Worker, tel telemetry.TelemetryProvider) (*BuildWorkerResult, error) {
-	if worker.RepoURL == "" {
-		return nil, fmt.Errorf("worker %s has empty repo_url", worker.Slug)
-	}
-
-	cacheKey := ComputeBuildCacheKey(worker)
-	imageTag := fmt.Sprintf("kronos-worker:%s-%s", worker.Slug, cacheKey)
-
-	// Check if cached Docker/Pack image already exists locally
-	if _, err := exec.LookPath("docker"); err == nil {
-		checkCmd := exec.CommandContext(ctx, "docker", "image", "inspect", imageTag)
-		if err := checkCmd.Run(); err == nil {
-			tel.LogInfo(ctx, "Build cache hit, skipping image build", "slug", worker.Slug, "image", imageTag, "cache_key", cacheKey)
-			return &BuildWorkerResult{
-				ImageTag: imageTag,
-				BuildDir: "",
-				Cached:   true,
-			}, nil
-		}
-	}
-
-	tempDir, err := os.MkdirTemp("", fmt.Sprintf("kronos-build-%s-*", worker.Slug))
-	if err != nil {
-		return nil, fmt.Errorf("failed creating temp build directory: %w", err)
-	}
-
-	tel.LogInfo(ctx, "Starting worker git clone", "slug", worker.Slug, "repo_url", worker.RepoURL, "repo_ref", worker.RepoRef)
-
-	user, token := resolveGitCredentials(worker.EnvVars)
-	cloneURL := FormatAuthenticatedURL(worker.RepoURL, user, token)
-
-	if err := CloneRepo(ctx, cloneURL, worker.RepoRef, tempDir); err != nil {
-		os.RemoveAll(tempDir)
-		return nil, err
-	}
-
-	// Determine build strategy: Dockerfile vs Cloud-Native Buildpacks SDK
+// executeContainerBuild compiles a container image using Dockerfile or Cloud-Native Buildpacks SDK.
+func executeContainerBuild(ctx context.Context, worker database.Worker, imageTag string, appPath string, tel telemetry.TelemetryProvider) (*BuildWorkerResult, error) {
 	dockerfilePath := ""
 	if worker.DockerfilePath != nil && *worker.DockerfilePath != "" {
-		dockerfilePath = filepath.Join(tempDir, *worker.DockerfilePath)
-	} else if _, err := os.Stat(filepath.Join(tempDir, "Dockerfile")); err == nil {
-		dockerfilePath = filepath.Join(tempDir, "Dockerfile")
+		dockerfilePath = filepath.Join(appPath, *worker.DockerfilePath)
+	} else if _, err := os.Stat(filepath.Join(appPath, "Dockerfile")); err == nil {
+		dockerfilePath = filepath.Join(appPath, "Dockerfile")
 	}
 
 	if dockerfilePath != "" {
 		tel.LogInfo(ctx, "Building worker with Dockerfile", "slug", worker.Slug, "dockerfile", dockerfilePath)
-		cmd := exec.CommandContext(ctx, "docker", "build", "-t", imageTag, "-f", dockerfilePath, tempDir)
+		cmd := exec.CommandContext(ctx, "docker", "build", "-t", imageTag, "-f", dockerfilePath, appPath)
 		var outBuf, errBuf bytes.Buffer
 		cmd.Stdout = &outBuf
 		cmd.Stderr = &errBuf
 
 		if err := cmd.Run(); err != nil {
-			os.RemoveAll(tempDir)
 			return nil, fmt.Errorf("docker build failed for %s: %w (stderr: %s)", worker.Slug, err, errBuf.String())
 		}
 	} else {
@@ -142,7 +105,6 @@ func BuildWorker(ctx context.Context, worker database.Worker, tel telemetry.Tele
 
 		pClient, err := packclient.NewClient()
 		if err != nil {
-			os.RemoveAll(tempDir)
 			return nil, fmt.Errorf("failed initializing pack SDK client: %w", err)
 		}
 
@@ -169,14 +131,13 @@ func BuildWorker(ctx context.Context, worker database.Worker, tel telemetry.Tele
 
 		buildOpts := packclient.BuildOptions{
 			Image:              imageTag,
-			AppPath:            tempDir,
+			AppPath:            appPath,
 			Builder:            "paketobuildpacks/builder:base",
 			Env:                envMap,
 			DefaultProcessType: defaultProcess,
 		}
 
 		if err := pClient.Build(ctx, buildOpts); err != nil {
-			os.RemoveAll(tempDir)
 			return nil, fmt.Errorf("pack SDK build failed for %s: %w", worker.Slug, err)
 		}
 	}
@@ -185,7 +146,16 @@ func BuildWorker(ctx context.Context, worker database.Worker, tel telemetry.Tele
 
 	return &BuildWorkerResult{
 		ImageTag: imageTag,
-		BuildDir: tempDir,
+		BuildDir: appPath,
 		Cached:   false,
 	}, nil
+}
+
+// BuildWorker is a convenience function that delegates build operations to a default Manager.
+func BuildWorker(ctx context.Context, worker database.Worker, tel telemetry.TelemetryProvider) (*BuildWorkerResult, error) {
+	mgr, err := NewManager(NewDefaultConfig(), tel)
+	if err != nil {
+		return nil, err
+	}
+	return mgr.Build(ctx, worker)
 }
