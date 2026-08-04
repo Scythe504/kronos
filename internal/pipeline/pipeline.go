@@ -18,11 +18,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-type TaskMeta struct {
-	Ctx       context.Context
-	StartTime time.Time
-}
-
 type Pipe struct {
 	Stdin   io.WriteCloser
 	Stdout  io.ReadCloser
@@ -44,16 +39,17 @@ type Pipeline struct {
 	workerCacheMu             sync.RWMutex
 	workerCache               map[string]database.Worker
 	inFlightMu                sync.RWMutex
-	inFlightTasks             map[uuid.UUID]TaskMeta
+	inFlightTasks             map[uuid.UUID]time.Time
 	tasksFailedCounter        otelmetric.Int64Counter
 	taskRetriesCounter        otelmetric.Int64Counter
 	activeWorkersCounter      otelmetric.Int64UpDownCounter
 	taskExecutionDurationHist otelmetric.Int64Histogram
 	taskQueueDurationHist     otelmetric.Int64Histogram
 	workerSpawnDurationHist   otelmetric.Int64Histogram
+	allowedSlugs              []string
 }
 
-func Init(db database.Service, nodeID string, tel telemetry.TelemetryProvider, bm *builder.Manager) *Pipeline {
+func Init(db database.Service, nodeID string, tel telemetry.TelemetryProvider, bm *builder.Manager, allowedSlugs []string) *Pipeline {
 	tasksFailedCounter, _ := tel.MeterInt64Counter(telemetry.MetricTasksFailed)
 	taskRetriesCounter, _ := tel.MeterInt64Counter(telemetry.MetricTaskRetries)
 	activeWorkersCounter, _ := tel.MeterInt64UpDownCounter(telemetry.MetricActiveWorkers)
@@ -66,6 +62,7 @@ func Init(db database.Service, nodeID string, tel telemetry.TelemetryProvider, b
 		nodeID:                    nodeID,
 		tel:                       tel,
 		builder:                   bm,
+		allowedSlugs:              allowedSlugs,
 		tasksFailedCounter:        tasksFailedCounter,
 		taskRetriesCounter:        taskRetriesCounter,
 		activeWorkersCounter:      activeWorkersCounter,
@@ -73,14 +70,33 @@ func Init(db database.Service, nodeID string, tel telemetry.TelemetryProvider, b
 		taskQueueDurationHist:     taskQueueDurationHist,
 		workerSpawnDurationHist:   workerSpawnDurationHist,
 		workerCache:               make(map[string]database.Worker),
+		inFlightTasks:             make(map[uuid.UUID]time.Time),
 		registry: Registry{
 			processes: make(map[string]*Pipe),
 			mu:        sync.RWMutex{},
 		},
-		inFlightTasks: make(map[uuid.UUID]TaskMeta),
 	}
 
 	return pipeline
+}
+
+func (p *Pipeline) AddInFlightTask(id uuid.UUID) {
+	p.inFlightMu.Lock()
+	defer p.inFlightMu.Unlock()
+	p.inFlightTasks[id] = time.Now()
+}
+
+func (p *Pipeline) GetInFlightTask(id uuid.UUID) (time.Time, bool) {
+	p.inFlightMu.RLock()
+	defer p.inFlightMu.RUnlock()
+	t, ok := p.inFlightTasks[id]
+	return t, ok
+}
+
+func (p *Pipeline) RemoveInFlightTask(id uuid.UUID) {
+	p.inFlightMu.Lock()
+	defer p.inFlightMu.Unlock()
+	delete(p.inFlightTasks, id)
 }
 
 // GetWorker retrieves worker metadata from the in-memory cache, falling back to database query.
@@ -126,28 +142,6 @@ func (p *Pipeline) PrecacheWorkers(ctx context.Context, allowedSlugs []string) {
 			}
 		}
 	}
-}
-
-func (p *Pipeline) AddInFlightTask(id uuid.UUID, ctx context.Context) {
-	p.inFlightMu.Lock()
-	defer p.inFlightMu.Unlock()
-	p.inFlightTasks[id] = TaskMeta{
-		Ctx:       ctx,
-		StartTime: time.Now(),
-	}
-}
-
-func (p *Pipeline) GetInFlightTask(id uuid.UUID) (TaskMeta, bool) {
-	p.inFlightMu.RLock()
-	defer p.inFlightMu.RUnlock()
-	meta, ok := p.inFlightTasks[id]
-	return meta, ok
-}
-
-func (p *Pipeline) RemoveInFlightTask(id uuid.UUID) {
-	p.inFlightMu.Lock()
-	defer p.inFlightMu.Unlock()
-	delete(p.inFlightTasks, id)
 }
 
 func (p *Pipeline) GetPipe(ctx context.Context, slug string) (*Pipe, error) {

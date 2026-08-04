@@ -1,9 +1,9 @@
 package builder
 
 import (
-	"os"
-	"path/filepath"
 	"runtime"
+
+	"github.com/scythe504/kronos/internal/utils"
 )
 
 // BuilderConfig holds path configurations and target architecture parameters for the build manager.
@@ -15,26 +15,11 @@ type BuilderConfig struct {
 	KeepBuildArtifacts bool
 }
 
-// NewDefaultConfig returns a BuilderConfig with sensible defaults based on OS environment or standard paths.
+// NewDefaultConfig returns a BuilderConfig with platform-native default storage paths.
 func NewDefaultConfig() BuilderConfig {
-	baseDir := os.Getenv("KRONOS_BUILD_DIR")
-	if baseDir == "" {
-		home, err := os.UserHomeDir()
-		if err == nil {
-			baseDir = filepath.Join(home, ".kronos", "builds")
-		} else {
-			baseDir = filepath.Join(os.TempDir(), "kronos-builds")
-		}
-	}
-
-	cacheDir := os.Getenv("KRONOS_CACHE_DIR")
-	if cacheDir == "" {
-		cacheDir = filepath.Join(baseDir, "cache")
-	}
-
 	return BuilderConfig{
-		RootDir:            baseDir,
-		CacheDir:           cacheDir,
+		RootDir:            utils.GetKronosBuildDir(),
+		CacheDir:           utils.GetKronosCacheDir(),
 		TargetOS:           runtime.GOOS,
 		TargetArch:         runtime.GOARCH,
 		KeepBuildArtifacts: false,

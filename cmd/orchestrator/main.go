@@ -4,17 +4,20 @@ import (
 	"context"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
-	_ "github.com/joho/godotenv/autoload"
 	"github.com/google/uuid"
+	_ "github.com/joho/godotenv/autoload"
+	"github.com/scythe504/kronos/internal/builder"
 	"github.com/scythe504/kronos/internal/cron"
 	"github.com/scythe504/kronos/internal/database"
 	"github.com/scythe504/kronos/internal/nodes"
 	"github.com/scythe504/kronos/internal/pipeline"
 	"github.com/scythe504/kronos/internal/telemetry"
+	"github.com/scythe504/kronos/internal/utils"
 )
 
 func main() {
@@ -43,8 +46,8 @@ func main() {
 	nodeCfg := nodes.GetNodeConfig(ctx)
 	nodeCfg.TaskUnit = database.TaskUnitCPU
 
-	// Attempt to read previously registered node ID from local file
-	if data, err := os.ReadFile(".node_id"); err == nil {
+	nodeIDPath := utils.GetNodeIDFilePath()
+	if data, err := os.ReadFile(nodeIDPath); err == nil {
 		if parsed, err := uuid.Parse(strings.TrimSpace(string(data))); err == nil {
 			nodeCfg.ID = &parsed
 		}
@@ -56,16 +59,34 @@ func main() {
 	}
 
 	// Persist the assigned unique ID locally
-	_ = os.WriteFile(".node_id", []byte(id), 0644)
+	_ = os.MkdirAll(filepath.Dir(nodeIDPath), 0755)
+	_ = os.WriteFile(nodeIDPath, []byte(id), 0644)
 
 	// Start publishing node resource metrics (CPU/Memory/GPU)
 	if err := nodes.StartSystemStatsPublisher(ctx, id); err != nil {
 		log.Println("[WARN_TELEMETRY_STATS_FAIL]:", err)
 	}
 
-	p := pipeline.Init(db, id, tel)
+	// Initialize Builder Manager
+	builderMgr, err := builder.NewManager(builder.NewDefaultConfig(), tel)
+	if err != nil {
+		log.Println("[WARN] Failed to initialize builder manager:", err)
+	}
 
-	cronSched := cron.NewScheduler(db)
+	allowedSlugsStr := os.Getenv("ALLOWED_SLUGS")
+	var allowedSlugs []string
+	if allowedSlugsStr != "" {
+		for _, s := range strings.Split(allowedSlugsStr, ",") {
+			if trimmed := strings.TrimSpace(s); trimmed != "" {
+				allowedSlugs = append(allowedSlugs, trimmed)
+			}
+		}
+	}
+
+	p := pipeline.Init(db, id, tel, builderMgr, allowedSlugs)
+	p.PrecacheWorkers(ctx, allowedSlugs)
+
+	cronSched := cron.NewScheduler(db, tel, builderMgr)
 	wg.Go(func() { cronSched.Start(ctx) })
 
 	wg.Go(func() { nodes.SendHeartbeat(db, ctx, id) })
@@ -73,6 +94,5 @@ func main() {
 	wg.Go(func() { p.Start(ctx) })
 
 	wg.Wait()
-	// give in-flight tasks time to finish
 	log.Println("Orchestrator stopped")
 }

@@ -86,7 +86,7 @@ func TestGetTasks_Concurrency(t *testing.T) {
 		go func(workerIndex int) {
 			defer wg.Done()
 			machineID := uuid.New().String()
-			tasks, err := dbService.GetTasks(ctx, machineID, TaskUnitCPU)
+			tasks, err := dbService.GetTasks(ctx, machineID, TaskUnitCPU, nil)
 			if err != nil {
 				t.Errorf("worker %d failed to get tasks: %v", workerIndex, err)
 				return
@@ -134,12 +134,12 @@ func TestGetTasks_Routing(t *testing.T) {
 	gpuTaskID, err := dbService.CreateTask(ctx, "gpu_worker", json.RawMessage(`{}`), nil, nil, nil, nil, false)
 	assert.NoError(t, err)
 
-	cpuNodeTasks, err := dbService.GetTasks(ctx, "cpu-node", TaskUnitCPU)
+	cpuNodeTasks, err := dbService.GetTasks(ctx, "cpu-node", TaskUnitCPU, nil)
 	assert.NoError(t, err)
 	assert.Len(t, cpuNodeTasks, 1)
 	assert.Equal(t, cpuTaskID, cpuNodeTasks[0].ID)
 
-	gpuNodeTasks, err := dbService.GetTasks(ctx, "gpu-node", TaskUnitGPU)
+	gpuNodeTasks, err := dbService.GetTasks(ctx, "gpu-node", TaskUnitGPU, nil)
 	assert.NoError(t, err)
 	assert.Len(t, gpuNodeTasks, 1)
 	assert.Equal(t, gpuTaskID, gpuNodeTasks[0].ID)
@@ -204,7 +204,7 @@ func TestFailTask(t *testing.T) {
 		assert.NoError(t, err)
 
 		machineID := "node-abc"
-		tasks, err := dbService.GetTasks(ctx, machineID, TaskUnitCPU)
+		tasks, err := dbService.GetTasks(ctx, machineID, TaskUnitCPU, nil)
 		assert.NoError(t, err)
 		assert.Len(t, tasks, 1)
 		assert.Equal(t, taskID, tasks[0].ID)

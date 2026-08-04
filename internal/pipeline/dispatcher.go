@@ -38,7 +38,7 @@ func (p *Pipeline) Start(ctx context.Context) {
 				attribute.String("task_unit", string(nodeCfg.TaskUnit)),
 			)
 
-			tasks, err = p.db.GetTasks(pollCtx, p.nodeID, nodeCfg.TaskUnit)
+			tasks, err = p.db.GetTasks(pollCtx, p.nodeID, nodeCfg.TaskUnit, p.allowedSlugs)
 			if err != nil {
 				p.tel.LogErrorln(pollCtx, "Failed to poll tasks from database", "error", err.Error())
 				return
@@ -92,7 +92,7 @@ func (p *Pipeline) Start(ctx context.Context) {
 					return
 				}
 
-				p.AddInFlightTask(task.ID, taskCtx)
+				p.AddInFlightTask(task.ID)
 				if err := p.Enqueue(taskCtx, task.PayloadSlug, adapted); err != nil {
 					p.tel.LogErrorln(taskCtx, "Failed to enqueue task to worker pipeline", "task_id", task.ID.String(), "error", err.Error())
 					p.RemoveInFlightTask(task.ID)

@@ -51,15 +51,11 @@ func (p *Pipeline) ResultHandler(ctx context.Context, rawRes json.RawMessage) {
 	}
 	wr.Timestamp = time.Now()
 
-	taskMeta, ok := p.GetInFlightTask(wr.TaskID)
-	var taskCtx context.Context
-	if !ok {
-		taskCtx = ctx
-	} else {
-		taskCtx = taskMeta.Ctx
-		if p.taskExecutionDurationHist != nil && !taskMeta.StartTime.IsZero() {
-			execDurationMs := time.Since(taskMeta.StartTime).Milliseconds()
-			p.taskExecutionDurationHist.Record(taskCtx, execDurationMs, metric.WithAttributes(
+	startTime, ok := p.GetInFlightTask(wr.TaskID)
+	if ok {
+		if p.taskExecutionDurationHist != nil && !startTime.IsZero() {
+			execDurationMs := time.Since(startTime).Milliseconds()
+			p.taskExecutionDurationHist.Record(ctx, execDurationMs, metric.WithAttributes(
 				attribute.String("task_id", wr.TaskID.String()),
 			))
 		}
@@ -70,31 +66,31 @@ func (p *Pipeline) ResultHandler(ctx context.Context, rawRes json.RawMessage) {
 
 	switch wr.ResultMessage {
 	case WorkerResultSuccessMesssage:
-		p.tel.LogInfo(taskCtx, "Task execution succeeded", "task_id", wr.TaskID.String())
-		p.db.CompleteTask(taskCtx, wr.TaskID, wr.Timestamp, wr.Output)
+		p.tel.LogInfo(ctx, "Task execution succeeded", "task_id", wr.TaskID.String())
+		p.db.CompleteTask(ctx, wr.TaskID, wr.Timestamp, wr.Output)
 	case WorkerResultFailedMessage:
-		p.tel.LogErrorln(taskCtx, "Task execution failed", "task_id", wr.TaskID.String(), "error", string(wr.Error))
+		p.tel.LogErrorln(ctx, "Task execution failed", "task_id", wr.TaskID.String(), "error", string(wr.Error))
 		if p.tasksFailedCounter != nil {
-			p.tasksFailedCounter.Add(taskCtx, 1, metric.WithAttributes(
+			p.tasksFailedCounter.Add(ctx, 1, metric.WithAttributes(
 				attribute.String("task_id", wr.TaskID.String()),
 			))
 		}
-		_, _, err := p.db.FailTask(taskCtx, wr.TaskID, wr.Error, wr.Timestamp)
+		_, _, err := p.db.FailTask(ctx, wr.TaskID, wr.Error, wr.Timestamp)
 		if err == nil && p.taskRetriesCounter != nil {
-			p.taskRetriesCounter.Add(taskCtx, 1, metric.WithAttributes(
+			p.taskRetriesCounter.Add(ctx, 1, metric.WithAttributes(
 				attribute.String("task_id", wr.TaskID.String()),
 			))
 		}
 	case WorkerResultACKTimeoutMessage:
-		p.tel.LogErrorln(taskCtx, "Task execution timed out (ACK timeout)", "task_id", wr.TaskID.String())
+		p.tel.LogErrorln(ctx, "Task execution timed out (ACK timeout)", "task_id", wr.TaskID.String())
 		if p.tasksFailedCounter != nil {
-			p.tasksFailedCounter.Add(taskCtx, 1, metric.WithAttributes(
+			p.tasksFailedCounter.Add(ctx, 1, metric.WithAttributes(
 				attribute.String("task_id", wr.TaskID.String()),
 			))
 		}
-		p.db.FailTask(taskCtx, wr.TaskID, []byte(`{"error": "worker process failed to acknowledge tasks"}`), wr.Timestamp)
+		p.db.FailTask(ctx, wr.TaskID, []byte(`{"error": "worker process failed to acknowledge tasks"}`), wr.Timestamp)
 	case WorkerResultACKMessage:
-		p.tel.LogInfo(taskCtx, "Task execution acknowledged by worker", "task_id", wr.TaskID.String())
+		p.tel.LogInfo(ctx, "Task execution acknowledged by worker", "task_id", wr.TaskID.String())
 		return
 	}
 }

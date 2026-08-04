@@ -34,29 +34,57 @@ func (s *service) GetTask(ctx context.Context, taskId string) (Task, error) {
 	return pgx.CollectOneRow(rows, pgx.RowToStructByName[Task])
 }
 
-func (s *service) GetTasks(ctx context.Context, machineID string, taskUnit TaskUnit) ([]Task, error) {
+func (s *service) GetTasks(ctx context.Context, machineID string, taskUnit TaskUnit, allowedSlugs []string) ([]Task, error) {
 	ctx, span := tracer.Start(ctx, "GetTasks")
 	defer span.End()
 	span.SetAttributes(
 		attribute.String("machine_id", machineID),
 		attribute.String("task_unit", string(taskUnit)),
 	)
-	query := `UPDATE tasks
-			SET status = $1, assigned_node_id = $2, updated_at = now()
-			WHERE id IN (
-				SELECT id
-				FROM tasks
-				WHERE status = 'queued' AND allocated_unit = $3::task_unit AND (next_retry_at IS NULL OR next_retry_at <= now()) AND deleted_at IS NULL
-				ORDER BY created_at ASC
-				LIMIT 20
-				FOR UPDATE SKIP LOCKED
-			)
-			RETURNING id, workflow_run_id, workflow_step_id, workflow_id, payload_slug, payload, retry_count, max_retry_count, 
-				last_error, next_retry_at, status, allocated_unit, assigned_node_id, chain_task,
-				created_at, updated_at, deleted_at
-		`
+	var query string
+	var args []any
+	if len(allowedSlugs) > 0 {
+		query = `UPDATE tasks
+				SET status = $1, assigned_node_id = $2, updated_at = now()
+				WHERE id IN (
+					SELECT id
+					FROM tasks
+					WHERE status = 'queued' 
+					  AND allocated_unit = $3::task_unit 
+					  AND payload_slug = ANY($4)
+					  AND (next_retry_at IS NULL OR next_retry_at <= now()) 
+					  AND deleted_at IS NULL
+					ORDER BY created_at ASC
+					LIMIT 20
+					FOR UPDATE SKIP LOCKED
+				)
+				RETURNING id, workflow_run_id, workflow_step_id, workflow_id, payload_slug, payload, retry_count, max_retry_count, 
+					last_error, next_retry_at, status, allocated_unit, assigned_node_id, chain_task,
+					created_at, updated_at, deleted_at
+			`
+		args = []any{TaskStatusRunning, machineID, taskUnit, allowedSlugs}
+	} else {
+		query = `UPDATE tasks
+				SET status = $1, assigned_node_id = $2, updated_at = now()
+				WHERE id IN (
+					SELECT id
+					FROM tasks
+					WHERE status = 'queued' 
+					  AND allocated_unit = $3::task_unit 
+					  AND (next_retry_at IS NULL OR next_retry_at <= now()) 
+					  AND deleted_at IS NULL
+					ORDER BY created_at ASC
+					LIMIT 20
+					FOR UPDATE SKIP LOCKED
+				)
+				RETURNING id, workflow_run_id, workflow_step_id, workflow_id, payload_slug, payload, retry_count, max_retry_count, 
+					last_error, next_retry_at, status, allocated_unit, assigned_node_id, chain_task,
+					created_at, updated_at, deleted_at
+			`
+		args = []any{TaskStatusRunning, machineID, taskUnit}
+	}
 	var tasks []Task
-	rows, err := s.pool.Query(ctx, query, TaskStatusRunning, machineID, taskUnit)
+	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
 		return tasks, err
 	}

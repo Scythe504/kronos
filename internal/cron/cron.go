@@ -2,19 +2,24 @@ package cron
 
 import (
 	"context"
-	"log"
 	"time"
 
+	"github.com/scythe504/kronos/internal/builder"
 	"github.com/scythe504/kronos/internal/database"
+	"github.com/scythe504/kronos/internal/telemetry"
 )
 
 type Scheduler struct {
-	db database.Service
+	db      database.Service
+	tel     telemetry.TelemetryProvider
+	builder *builder.Manager
 }
 
-func NewScheduler(db database.Service) *Scheduler {
+func NewScheduler(db database.Service, tel telemetry.TelemetryProvider, bm *builder.Manager) *Scheduler {
 	return &Scheduler{
-		db: db,
+		db:      db,
+		tel:     tel,
+		builder: bm,
 	}
 }
 
@@ -37,11 +42,15 @@ func (s *Scheduler) Start(ctx context.Context) {
 func (s *Scheduler) checkAndTrigger(ctx context.Context) {
 	runIDs, err := s.db.TriggerDueCronWorkflows(ctx)
 	if err != nil {
-		log.Println("ERR(CronScheduler): failed to trigger due cron workflows: ", err)
+		if s.tel != nil {
+			s.tel.LogErrorln(ctx, "Failed to trigger due cron workflows", "error", err)
+		}
 		return
 	}
 
 	if len(runIDs) > 0 {
-		log.Printf("INFO(CronScheduler): triggered %d workflow run(s)\n", len(runIDs))
+		if s.tel != nil {
+			s.tel.LogInfo(ctx, "Triggered due cron workflow runs", "count", len(runIDs))
+		}
 	}
 }
