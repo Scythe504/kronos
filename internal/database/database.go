@@ -27,12 +27,21 @@ type Service interface {
 	CreateTasks(ctx context.Context, tx pgx.Tx, tasks []Task) error
 	CreateTaskChains(ctx context.Context, tx pgx.Tx, chains []TaskChain) error
 	CreateTaskChain(ctx context.Context, steps []Step) ([]uuid.UUID, error)
+	ListTasks(ctx context.Context, page, perPage int, status, payloadSlug string) ([]Task, error)
+	DeleteTask(ctx context.Context, id string) (string, error)
+	RetryFailedTasks(ctx context.Context, taskIDs []string) (int64, error)
 
 	// Workflow operations
 	CreateWorkflowTemplate(ctx context.Context, wp WorkflowPayload) (uuid.UUID, error)
+	GetWorkflowTemplate(ctx context.Context, id string) (Workflow, error)
+	GetWorkflowTemplates(ctx context.Context, page, perPage int) ([]Workflow, error)
 	CompleteWorkflowRun(ctx context.Context, workflowRunID uuid.UUID, workflowID uuid.UUID) (uuid.UUID, error)
 	TriggerWorkflow(ctx context.Context, workflowID uuid.UUID) (uuid.UUID, error)
 	TriggerDueCronWorkflows(ctx context.Context) ([]uuid.UUID, error)
+
+	// Reaper operations
+	ReapDeadNodes(ctx context.Context, threshold time.Duration) (int64, error)
+	ReapStuckTasks(ctx context.Context, threshold time.Duration) (int64, error)
 
 	// Node operations
 	RegisterNode(ctx context.Context, n Node) (string, error)
@@ -40,6 +49,12 @@ type Service interface {
 	GetNode(ctx context.Context, nodeID string) (Node, error)
 	GetNodes(ctx context.Context, page int, perPage int) ([]Node, error)
 	UpdateNodeLastHBeat(ctx context.Context, nodeID string) (string, error)
+
+	// Worker operations
+	UpsertWorker(ctx context.Context, tx pgx.Tx, workers []Worker) (string, error)
+	GetWorker(ctx context.Context, slug string) (Worker, error)
+	GetWorkers(ctx context.Context, page int, perPage int) ([]Worker, error)
+	DeleteWorker(ctx context.Context, slug string) (string, error)
 
 	Health() map[string]string
 	Close()

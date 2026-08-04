@@ -55,17 +55,22 @@ const (
 
 // Worker represents the configuration of a registered worker service/executable
 type Worker struct {
-	Slug               string    `db:"slug" json:"slug"`
-	Name               string    `db:"name" json:"name"`
-	Description        *string   `db:"description" json:"description"`
-	RepoURL            *string   `db:"repo_url" json:"repo_url"`
-	RepoRef            *string   `db:"repo_ref" json:"repo_ref"`
-	EnvVars            []byte    `db:"env_vars" json:"env_vars"`
-	Entrypoint         string    `db:"entrypoint" json:"entrypoint"`
-	TaskUnit           TaskUnit  `db:"task_unit" json:"task_unit"`
-	TaskTimeoutSeconds int       `db:"task_timeout_seconds" json:"task_timeout_seconds"`
-	CreatedAt          time.Time `db:"created_at" json:"created_at"`
-	UpdatedAt          time.Time `db:"updated_at" json:"updated_at"`
+	Slug               string       `db:"slug" json:"slug"`
+	Name               string       `db:"name" json:"name"`
+	Description        *string      `db:"description" json:"description"`
+	RepoURL            string       `db:"repo_url" json:"repo_url"`
+	RepoRef            string       `db:"repo_ref" json:"repo_ref"`
+	EnvVars            []byte       `db:"env_vars" json:"env_vars"`
+	PreBuildCommand    *string      `db:"pre_build_command" json:"pre_build_command,omitempty"`
+	BuildCommand       *string      `db:"build_command" json:"build_command,omitempty"`
+	RunCommand         *string      `db:"run_command" json:"run_command,omitempty"`
+	DockerfilePath     *string      `db:"dockerfile_path" json:"dockerfile_path,omitempty"`
+	Entrypoint         string       `db:"entrypoint" json:"entrypoint"`
+	TaskUnit           TaskUnit     `db:"task_unit" json:"task_unit"`
+	TaskTimeoutSeconds int          `db:"task_timeout_seconds" json:"task_timeout_seconds"`
+	CreatedAt          time.Time    `db:"created_at" json:"created_at"`
+	UpdatedAt          time.Time    `db:"updated_at" json:"updated_at"`
+	DeletedAt          sql.NullTime `db:"deleted_at" json:"deleted_at"`
 }
 
 // Node represents a compute node registered with the cluster

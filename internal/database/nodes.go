@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -213,4 +214,18 @@ func (s *service) UpdateNodeLastHBeat(ctx context.Context, nodeID string) (strin
 	}
 
 	return retID.String(), nil
+}
+
+func (s *service) ReapDeadNodes(ctx context.Context, threshold time.Duration) (int64, error) {
+	query := `UPDATE nodes 
+		SET status = 'dead'::node_status, updated_at = now()
+		WHERE last_heartbeat_at < now() - ($1 || ' seconds')::interval
+		  AND status != 'dead'::node_status
+		  AND status != 'inactive'::node_status
+	`
+	tag, err := s.pool.Exec(ctx, query, threshold.Seconds())
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
 }

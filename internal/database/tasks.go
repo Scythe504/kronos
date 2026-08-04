@@ -531,3 +531,100 @@ func (s *service) CreateTaskChain(ctx context.Context, steps []Step) ([]uuid.UUI
 
 	return taskIDs, nil
 }
+
+func (s *service) ListTasks(ctx context.Context, page, perPage int, status, payloadSlug string) ([]Task, error) {
+	if page < 1 {
+		page = 1
+	}
+	if perPage < 1 {
+		perPage = 10
+	}
+	offset := (page - 1) * perPage
+
+	query := `SELECT 
+		id, workflow_run_id, workflow_step_id, workflow_id, payload_slug, payload, retry_count, max_retry_count, 
+		last_error, next_retry_at, status, allocated_unit, assigned_node_id, chain_task,
+		created_at, updated_at, deleted_at
+	FROM tasks
+	WHERE deleted_at IS NULL
+	`
+
+	var args []any
+	argIdx := 1
+
+	if status != "" {
+		query += fmt.Sprintf(" AND status = $%d::task_status", argIdx)
+		args = append(args, status)
+		argIdx++
+	}
+
+	if payloadSlug != "" {
+		query += fmt.Sprintf(" AND payload_slug = $%d", argIdx)
+		args = append(args, payloadSlug)
+		argIdx++
+	}
+
+	query += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d OFFSET $%d", argIdx, argIdx+1)
+	args = append(args, perPage, offset)
+
+	rows, err := s.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return pgx.CollectRows(rows, pgx.RowToStructByName[Task])
+}
+
+func (s *service) DeleteTask(ctx context.Context, id string) (string, error) {
+	taskUUID, err := uuid.Parse(id)
+	if err != nil {
+		return "", err
+	}
+	query := `UPDATE tasks SET deleted_at = now(), updated_at = now() WHERE id = $1 AND deleted_at IS NULL RETURNING id`
+	var deletedID uuid.UUID
+	err = s.pool.QueryRow(ctx, query, taskUUID).Scan(&deletedID)
+	if err != nil {
+		return "", err
+	}
+	return deletedID.String(), nil
+}
+
+func (s *service) RetryFailedTasks(ctx context.Context, taskIDs []string) (int64, error) {
+	var query string
+	var args []any
+
+	if len(taskIDs) > 0 {
+		uuids := make([]uuid.UUID, 0, len(taskIDs))
+		for _, idStr := range taskIDs {
+			if u, err := uuid.Parse(idStr); err == nil {
+				uuids = append(uuids, u)
+			}
+		}
+		query = `UPDATE tasks SET status = 'queued'::task_status, retry_count = 0, next_retry_at = NULL, updated_at = now() WHERE id = ANY($1) AND deleted_at IS NULL`
+		args = append(args, uuids)
+	} else {
+		query = `UPDATE tasks SET status = 'queued'::task_status, retry_count = 0, next_retry_at = NULL, updated_at = now() WHERE status = 'failed'::task_status AND deleted_at IS NULL`
+	}
+
+	tag, err := s.pool.Exec(ctx, query, args...)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
+func (s *service) ReapStuckTasks(ctx context.Context, threshold time.Duration) (int64, error) {
+	query := `UPDATE tasks
+		SET status = 'queued'::task_status, next_retry_at = NULL, updated_at = now()
+		WHERE status = 'running'::task_status
+		  AND updated_at < now() - ($1 || ' seconds')::interval
+		  AND retry_count < max_retry_count
+		  AND deleted_at IS NULL
+	`
+	tag, err := s.pool.Exec(ctx, query, threshold.Seconds())
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}

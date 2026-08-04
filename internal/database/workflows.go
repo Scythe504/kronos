@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,10 +13,11 @@ import (
 )
 
 type WorkflowPayload struct {
-	Name          string `json:"slug"`
-	TriggerType   string `json:"trigger_type,omitempty"`
-	TriggerConfig string `json:"trigger_config,omitempty"`
-	Steps         []Step `json:"chains"`
+	Name          string   `json:"slug"`
+	TriggerType   string   `json:"trigger_type,omitempty"`
+	TriggerConfig string   `json:"trigger_config,omitempty"`
+	Steps         []Step   `json:"chains"`
+	Workers       []Worker `json:"workers,omitempty"`
 }
 
 type Step struct {
@@ -23,6 +25,7 @@ type Step struct {
 	StepOrder        int              `json:"step_order"`
 	TriggerCondition TriggerCondition `json:"trigger_condition,omitempty"`
 	Payload          json.RawMessage  `json:"payload"`
+	Worker           *Worker          `json:"worker,omitempty"`
 }
 
 func (s *service) CreateWorkflowTemplate(ctx context.Context, wp WorkflowPayload) (uuid.UUID, error) {
@@ -44,6 +47,22 @@ func (s *service) CreateWorkflowTemplate(ctx context.Context, wp WorkflowPayload
 		return uuid.Nil, err
 	}
 	defer tx.Rollback(ctx)
+
+	// Collect and upsert any worker definitions included in the workflow template
+	var workersToUpsert []Worker
+	workersToUpsert = append(workersToUpsert, wp.Workers...)
+	for _, step := range wp.Steps {
+		if step.Worker != nil {
+			workersToUpsert = append(workersToUpsert, *step.Worker)
+		}
+	}
+
+	if len(workersToUpsert) > 0 {
+		_, err := s.UpsertWorker(ctx, tx, workersToUpsert)
+		if err != nil {
+			return uuid.Nil, fmt.Errorf("failed to upsert workers for workflow template: %w", err)
+		}
+	}
 
 	var workflowRetId uuid.UUID
 	row := tx.QueryRow(ctx, queryInsertWorkflow, wp.Name, wp.TriggerType, wp.TriggerConfig)
@@ -70,7 +89,9 @@ func (s *service) CreateWorkflowTemplate(ctx context.Context, wp WorkflowPayload
 	if n != int64(len(wp.Steps)) {
 		return uuid.Nil, errors.New("workflow steps count not match rows inserted")
 	}
-	tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return uuid.Nil, err
+	}
 	return workflowRetId, nil
 }
 
@@ -289,4 +310,37 @@ func (s *service) TriggerDueCronWorkflows(ctx context.Context) ([]uuid.UUID, err
 	}
 
 	return runIDs, nil
+}
+
+func (s *service) GetWorkflowTemplate(ctx context.Context, id string) (Workflow, error) {
+	workflowUUID, err := uuid.Parse(id)
+	if err != nil {
+		return Workflow{}, err
+	}
+	query := `SELECT id, name, description, trigger_type, trigger_config, is_active, created_at, updated_at, deleted_at FROM workflows WHERE id = $1 AND deleted_at IS NULL`
+	rows, err := s.pool.Query(ctx, query, workflowUUID)
+	if err != nil {
+		return Workflow{}, err
+	}
+	defer rows.Close()
+	return pgx.CollectOneRow(rows, pgx.RowToStructByName[Workflow])
+}
+
+func (s *service) GetWorkflowTemplates(ctx context.Context, page, perPage int) ([]Workflow, error) {
+	if page < 1 {
+		page = 1
+	}
+	if perPage < 1 {
+		perPage = 10
+	}
+	offset := (page - 1) * perPage
+
+	query := `SELECT id, name, description, trigger_type, trigger_config, is_active, created_at, updated_at, deleted_at FROM workflows WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT $1 OFFSET $2`
+	rows, err := s.pool.Query(ctx, query, perPage, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return pgx.CollectRows(rows, pgx.RowToStructByName[Workflow])
 }
