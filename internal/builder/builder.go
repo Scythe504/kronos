@@ -46,7 +46,8 @@ func ComputeBuildCacheKey(worker database.Worker) string {
 	return hex.EncodeToString(hashBytes)[:16]
 }
 
-// resolveGitCredentials parses environment variables for private git credentials (username, token)
+// resolveGitCredentials parses plaintext environment variables for private git credentials.
+// env_vars are pre-decrypted by the Master server before being served to the orchestrator.
 func resolveGitCredentials(envVars []byte) (string, string) {
 	if len(envVars) == 0 {
 		return "", ""

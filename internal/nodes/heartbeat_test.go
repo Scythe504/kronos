@@ -21,21 +21,25 @@ func (m *mockDB) UpdateNodeLastHBeat(ctx context.Context, nodeID string) (string
 	return nodeID, nil
 }
 
+func (m *mockDB) GetWorkers(ctx context.Context, page int, perPage int) ([]database.Worker, error) {
+	return nil, nil
+}
+
 func TestSendHeartbeat(t *testing.T) {
 	ctx := t.Context()
-	timerCtx, cancel := context.WithTimeout(ctx, 6 * time.Second)
+	timerCtx, cancel := context.WithTimeout(ctx, 35*time.Second)
 	defer cancel()
 
 	var heartbeatCount int32
 	mock := &mockDB{
 		onHeartbeat: func(ctx context.Context, nodeID string) (string, error) {
 			atomic.AddInt32(&heartbeatCount, 1)
-			cancel() // Cancel the timeout context early to speed up the test
+			cancel()
 			return nodeID, nil
 		},
 	}
 
-	go SendHeartbeat(mock, timerCtx, "dummy-m-id")
+	go SendHeartbeat(mock, timerCtx, "dummy-m-id", database.TaskUnitCPU, nil)
 	<-timerCtx.Done()
 
 	count := atomic.LoadInt32(&heartbeatCount)

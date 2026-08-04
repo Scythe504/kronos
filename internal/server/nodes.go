@@ -33,11 +33,10 @@ type nodeInitRequest struct {
 }
 
 type nodeInitResponse struct {
-	NodeID        string   `json:"node_id"`
-	DBURL         string   `json:"db_url"`
-	EncryptionKey string   `json:"encryption_key"`
-	AllowedSlugs  []string `json:"allowed_slugs"`
-	TaskUnit      string   `json:"task_unit"`
+	NodeID       string   `json:"node_id"`
+	DBURL        string   `json:"db_url"`
+	AllowedSlugs []string `json:"allowed_slugs"`
+	TaskUnit     string   `json:"task_unit"`
 }
 
 type nodeResponse struct {
@@ -120,17 +119,15 @@ func (s *Server) initNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	encKey := string(utils.GetEncryptionKey())
 	dbURL := os.Getenv("DB_URL")
 
 	s.tel.LogInfo(r.Context(), "Node registered successfully", "node_id", registeredID, "machine_id", reqBody.MachineID)
 
 	utils.WriteJSON(w, http.StatusOK, nodeInitResponse{
-		NodeID:        registeredID,
-		DBURL:         dbURL,
-		EncryptionKey: encKey,
-		AllowedSlugs:  allowedSlugs,
-		TaskUnit:      string(unit),
+		NodeID:       registeredID,
+		DBURL:        dbURL,
+		AllowedSlugs: allowedSlugs,
+		TaskUnit:     string(unit),
 	})
 }
 

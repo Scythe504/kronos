@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -34,55 +35,46 @@ func (s *service) GetTask(ctx context.Context, taskId string) (Task, error) {
 	return pgx.CollectOneRow(rows, pgx.RowToStructByName[Task])
 }
 
-func (s *service) GetTasks(ctx context.Context, machineID string, taskUnit TaskUnit, allowedSlugs []string) ([]Task, error) {
+func (s *service) GetTasks(ctx context.Context, machineID string, taskUnits []TaskUnit, allowedSlugs []string) ([]Task, error) {
 	ctx, span := tracer.Start(ctx, "GetTasks")
 	defer span.End()
-	span.SetAttributes(
-		attribute.String("machine_id", machineID),
-		attribute.String("task_unit", string(taskUnit)),
-	)
-	var query string
+
+	var whereClauses []string
 	var args []any
-	if len(allowedSlugs) > 0 {
-		query = `UPDATE tasks
-				SET status = $1, assigned_node_id = $2, updated_at = now()
-				WHERE id IN (
-					SELECT id
-					FROM tasks
-					WHERE status = 'queued' 
-					  AND allocated_unit = $3::task_unit 
-					  AND payload_slug = ANY($4)
-					  AND (next_retry_at IS NULL OR next_retry_at <= now()) 
-					  AND deleted_at IS NULL
-					ORDER BY created_at ASC
-					LIMIT 20
-					FOR UPDATE SKIP LOCKED
-				)
-				RETURNING id, workflow_run_id, workflow_step_id, workflow_id, payload_slug, payload, retry_count, max_retry_count, 
-					last_error, next_retry_at, status, allocated_unit, assigned_node_id, chain_task,
-					created_at, updated_at, deleted_at
-			`
-		args = []any{TaskStatusRunning, machineID, taskUnit, allowedSlugs}
-	} else {
-		query = `UPDATE tasks
-				SET status = $1, assigned_node_id = $2, updated_at = now()
-				WHERE id IN (
-					SELECT id
-					FROM tasks
-					WHERE status = 'queued' 
-					  AND allocated_unit = $3::task_unit 
-					  AND (next_retry_at IS NULL OR next_retry_at <= now()) 
-					  AND deleted_at IS NULL
-					ORDER BY created_at ASC
-					LIMIT 20
-					FOR UPDATE SKIP LOCKED
-				)
-				RETURNING id, workflow_run_id, workflow_step_id, workflow_id, payload_slug, payload, retry_count, max_retry_count, 
-					last_error, next_retry_at, status, allocated_unit, assigned_node_id, chain_task,
-					created_at, updated_at, deleted_at
-			`
-		args = []any{TaskStatusRunning, machineID, taskUnit}
+
+	args = append(args, TaskStatusRunning, machineID)
+	whereClauses = append(whereClauses, "status = 'queued'", "(next_retry_at IS NULL OR next_retry_at <= now())", "deleted_at IS NULL")
+
+	if len(taskUnits) > 0 {
+		unitStrs := make([]string, len(taskUnits))
+		for i, tu := range taskUnits {
+			unitStrs[i] = string(tu)
+		}
+		args = append(args, unitStrs)
+		whereClauses = append(whereClauses, fmt.Sprintf("allocated_unit::text = ANY($%d::text[])", len(args)))
 	}
+
+	if len(allowedSlugs) > 0 {
+		args = append(args, allowedSlugs)
+		whereClauses = append(whereClauses, fmt.Sprintf("payload_slug = ANY($%d)", len(args)))
+	}
+
+	whereStmt := strings.Join(whereClauses, " AND ")
+
+	query := fmt.Sprintf(`UPDATE tasks
+			SET status = $1, assigned_node_id = $2, updated_at = now()
+			WHERE id IN (
+				SELECT id
+				FROM tasks
+				WHERE %s
+				ORDER BY created_at ASC
+				LIMIT 20
+				FOR UPDATE SKIP LOCKED
+			)
+			RETURNING id, workflow_run_id, workflow_step_id, workflow_id, payload_slug, payload, retry_count, max_retry_count, 
+				last_error, next_retry_at, status, allocated_unit, assigned_node_id, chain_task,
+				created_at, updated_at, deleted_at`, whereStmt)
+
 	var tasks []Task
 	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {

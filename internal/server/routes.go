@@ -17,9 +17,17 @@ func (s *Server) RegisterRoutes() http.Handler {
 	m.Use(s.corsMiddleware)
 	m.Use(s.telemetryMiddleware)
 	m.Get("/health", s.healthHandler)
+	m.Get("/setup.sh", s.installScriptHandler)
+	m.Get("/setup.ps1", s.installPS1Handler)
+	m.Get("/install.sh", s.installScriptHandler)
+	m.Get("/install.ps1", s.installPS1Handler)
 
 	// api/v1 routes
 	m.Route("/api/v1", func(r chi.Router) {
+		r.Get("/setup.sh", s.installScriptHandler)
+		r.Get("/setup.ps1", s.installPS1Handler)
+		r.Get("/install.sh", s.installScriptHandler)
+		r.Get("/install.ps1", s.installPS1Handler)
 		// Worker routes
 		r.Post("/workers", s.createWorker)
 		r.Get("/workers", s.getWorkers)
@@ -47,6 +55,10 @@ func (s *Server) RegisterRoutes() http.Handler {
 		r.Post("/workflows/{id}/trigger", s.triggerWorkflow)
 		r.Post("/workflows/task-chain", s.createTaskchain)
 		r.Post("/webhooks/{workflow_id}", s.triggerWorkflow)
+
+		// SSE Log & Metrics Streaming
+		r.Get("/metrics/stream", s.streamLogs)
+		r.Get("/logs/stream", s.streamLogs)
 	})
 
 	return m

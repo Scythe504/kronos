@@ -89,7 +89,11 @@ func main() {
 	cronSched := cron.NewScheduler(db, tel, builderMgr)
 	wg.Go(func() { cronSched.Start(ctx) })
 
-	wg.Go(func() { nodes.SendHeartbeat(db, ctx, id) })
+	wg.Go(func() {
+		nodes.SendHeartbeat(db, ctx, id, nodeCfg.TaskUnit, func(hbCtx context.Context, newSlugs []string) {
+			p.SyncAllowedSlugs(hbCtx, newSlugs)
+		})
+	})
 
 	wg.Go(func() { p.Start(ctx) })
 

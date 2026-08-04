@@ -4,6 +4,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"os"
 )
 
+// EncryptEnv encrypts plaintext using AES-256-GCM, returning a base64-encoded ciphertext.
 func EncryptEnv(plaintext string, key []byte) (string, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -31,6 +33,7 @@ func EncryptEnv(plaintext string, key []byte) (string, error) {
 	return base64.StdEncoding.EncodeToString(cipherText), nil
 }
 
+// DecryptEnv decrypts a base64-encoded AES-256-GCM ciphertext, returning the original plaintext.
 func DecryptEnv(cryptoText string, key []byte) (string, error) {
 	cipherText, err := base64.StdEncoding.DecodeString(cryptoText)
 	if err != nil {
@@ -39,13 +42,14 @@ func DecryptEnv(cryptoText string, key []byte) (string, error) {
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return "", fmt.Errorf("failed to initialize gcm while decrypting: %w", err)
+		return "", fmt.Errorf("failed to initialize cipher while decrypting: %w", err)
 	}
 
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
 		return "", fmt.Errorf("failed to initialize gcm while decrypting: %w", err)
 	}
+
 	nonceSize := gcm.NonceSize()
 	if len(cipherText) < nonceSize {
 		return "", errors.New("ciphertext too short")
@@ -59,16 +63,14 @@ func DecryptEnv(cryptoText string, key []byte) (string, error) {
 	return string(plaintext), nil
 }
 
+// GetEncryptionKey derives a 32-byte AES-256 key from the SECRET_KEY environment variable
+// using SHA-256 so that keys of any length produce a valid fixed-size key.
+// It panics if SECRET_KEY is not set, as operating without a real key is insecure.
 func GetEncryptionKey() []byte {
-	key := os.Getenv("SECRET_KEY")
-	if key == "" {
-		key = os.Getenv("ENCRYPTION_KEY")
+	secret := os.Getenv("SECRET_KEY")
+	if secret == "" {
+		panic("SECRET_KEY environment variable is not set — cannot safely derive encryption key")
 	}
-	if key == "" {
-		key = "kronos-secret-encryption-key-32b"
-	}
-	if len(key) < 32 {
-		key = (key + "0123456789abcdef0123456789abcdef")[:32]
-	}
-	return []byte(key[:32])
+	hash := sha256.Sum256([]byte(secret))
+	return hash[:]
 }

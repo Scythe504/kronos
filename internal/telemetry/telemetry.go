@@ -23,17 +23,20 @@ type TelemetryProvider interface {
 	MeterInt64Histogram(metric Metric) (otelmetric.Int64Histogram, error)
 	MeterInt64UpDownCounter(metric Metric) (otelmetric.Int64UpDownCounter, error)
 	TraceStart(ctx context.Context, name string) (context.Context, oteltrace.Span)
+	SubscribeLogs() chan string
+	UnsubscribeLogs(ch chan string)
 	Shutdown(ctx context.Context)
 }
 
 type Telemetry struct {
-	lp     *log.LoggerProvider
-	mp     *metric.MeterProvider
-	tp     *trace.TracerProvider
-	log    *slog.Logger
-	meter  otelmetric.Meter
-	tracer oteltrace.Tracer
-	cfg    Config
+	lp       *log.LoggerProvider
+	mp       *metric.MeterProvider
+	tp       *trace.TracerProvider
+	log      *slog.Logger
+	meter    otelmetric.Meter
+	tracer   oteltrace.Tracer
+	streamer *LogStreamer
+	cfg      Config
 }
 
 func NewTelemetry(ctx context.Context, cfg Config) (*Telemetry, error) {
@@ -50,8 +53,11 @@ func NewTelemetry(ctx context.Context, cfg Config) (*Telemetry, error) {
 
 	otelHandler := otelslog.NewHandler(cfg.ServiceName, otelslog.WithLoggerProvider(lp))
 
+	streamer := NewLogStreamer()
+	sHandler := newStreamerHandler(streamer)
+
 	logger := slog.New(
-		slog.NewMultiHandler(jsonHandler, otelHandler),
+		slog.NewMultiHandler(jsonHandler, otelHandler, sHandler),
 	)
 	slog.SetDefault(logger)
 
@@ -69,13 +75,14 @@ func NewTelemetry(ctx context.Context, cfg Config) (*Telemetry, error) {
 	tracer := tp.Tracer(cfg.ServiceName)
 
 	return &Telemetry{
-		lp:     lp,
-		mp:     mp,
-		tp:     tp,
-		log:    logger,
-		meter:  meter,
-		tracer: tracer,
-		cfg:    cfg,
+		lp:       lp,
+		mp:       mp,
+		tp:       tp,
+		log:      logger,
+		meter:    meter,
+		tracer:   tracer,
+		streamer: streamer,
+		cfg:      cfg,
 	}, nil
 }
 
@@ -140,6 +147,21 @@ func (t *Telemetry) MeterInt64UpDownCounter(metric Metric) (otelmetric.Int64UpDo
 
 func (t *Telemetry) TraceStart(ctx context.Context, name string) (context.Context, oteltrace.Span) {
 	return t.tracer.Start(ctx, name)
+}
+
+func (t *Telemetry) SubscribeLogs() chan string {
+	if t.streamer != nil {
+		return t.streamer.Subscribe()
+	}
+	ch := make(chan string)
+	close(ch)
+	return ch
+}
+
+func (t *Telemetry) UnsubscribeLogs(ch chan string) {
+	if t.streamer != nil {
+		t.streamer.Unsubscribe(ch)
+	}
 }
 
 func (t *Telemetry) Shutdown(ctx context.Context) {

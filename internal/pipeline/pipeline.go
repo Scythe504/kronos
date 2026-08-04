@@ -144,6 +144,50 @@ func (p *Pipeline) PrecacheWorkers(ctx context.Context, allowedSlugs []string) {
 	}
 }
 
+// SyncAllowedSlugs updates the pipeline's allowed slug list from a fresh heartbeat response.
+// It evicts removed slugs from the worker cache, prunes their images and workspace dirs,
+// and pre-caches any newly added slugs.
+func (p *Pipeline) SyncAllowedSlugs(ctx context.Context, newSlugs []string) {
+	newSet := make(map[string]struct{}, len(newSlugs))
+	for _, s := range newSlugs {
+		newSet[s] = struct{}{}
+	}
+
+	oldSet := make(map[string]struct{}, len(p.allowedSlugs))
+	for _, s := range p.allowedSlugs {
+		oldSet[s] = struct{}{}
+	}
+
+	// Evict removed slugs from the in-memory worker cache.
+	p.workerCacheMu.Lock()
+	for slug := range oldSet {
+		if _, stillAllowed := newSet[slug]; !stillAllowed {
+			delete(p.workerCache, slug)
+			p.tel.LogInfo(ctx, "Evicted worker cache entry for removed slug", "slug", slug)
+		}
+	}
+	p.workerCacheMu.Unlock()
+
+	// Prune Docker images and workspace dirs for removed slugs.
+	if p.builder != nil {
+		p.builder.PruneRemovedSlugs(ctx, newSlugs)
+	}
+
+	// Pre-cache newly added slugs.
+	var addedSlugs []string
+	for _, s := range newSlugs {
+		if _, wasAllowed := oldSet[s]; !wasAllowed {
+			addedSlugs = append(addedSlugs, s)
+		}
+	}
+	if len(addedSlugs) > 0 {
+		p.tel.LogInfo(ctx, "Pre-caching newly assigned slugs", "slugs", addedSlugs)
+		go p.PrecacheWorkers(ctx, addedSlugs)
+	}
+
+	p.allowedSlugs = newSlugs
+}
+
 func (p *Pipeline) GetPipe(ctx context.Context, slug string) (*Pipe, error) {
 	p.registry.mu.RLock()
 	pipe, ok := p.registry.processes[slug]

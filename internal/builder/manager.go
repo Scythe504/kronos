@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/scythe504/kronos/internal/database"
 	"github.com/scythe504/kronos/internal/telemetry"
@@ -104,4 +105,52 @@ func (m *Manager) Build(ctx context.Context, worker database.Worker) (*BuildWork
 	}
 
 	return res, nil
+}
+
+// PruneRemovedSlugs removes Docker images and workspace directories for any worker
+// slug that is no longer present in the provided allowedSlugs set.
+func (m *Manager) PruneRemovedSlugs(ctx context.Context, allowedSlugs []string) {
+	allowed := make(map[string]struct{}, len(allowedSlugs))
+	for _, s := range allowedSlugs {
+		allowed[s] = struct{}{}
+	}
+
+	entries, err := os.ReadDir(m.config.RootDir)
+	if err != nil {
+		return
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		slug := entry.Name()
+		if _, ok := allowed[slug]; ok {
+			continue
+		}
+
+		// Remove workspace directory for the evicted slug.
+		slugDir := filepath.Join(m.config.RootDir, slug)
+		if err := os.RemoveAll(slugDir); err != nil {
+			m.tel.LogErrorln(ctx, "Failed to prune workspace dir for removed slug", "slug", slug, "error", err)
+		} else {
+			m.tel.LogInfo(ctx, "Pruned workspace dir for removed slug", "slug", slug)
+		}
+
+		// Remove associated Docker images (kronos-worker:<slug>-*).
+		cmd := exec.CommandContext(ctx, "docker", "images", "--format", "{{.Repository}}:{{.Tag}}", "--filter",
+			"reference=kronos-worker:"+slug+"-*")
+		out, err := cmd.Output()
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Fields(string(out)) {
+			rmCmd := exec.CommandContext(ctx, "docker", "rmi", "-f", line)
+			if err := rmCmd.Run(); err != nil {
+				m.tel.LogErrorln(ctx, "Failed to remove Docker image for removed slug", "image", line, "error", err)
+			} else {
+				m.tel.LogInfo(ctx, "Removed Docker image for evicted slug", "image", line)
+			}
+		}
+	}
 }

@@ -5,7 +5,13 @@ import (
 	"testing"
 )
 
+func setTestKey(t *testing.T) {
+	t.Helper()
+	t.Setenv("SECRET_KEY", "test-secret-key-for-unit-tests")
+}
+
 func TestEncryptDecryptEnv_Success(t *testing.T) {
+	setTestKey(t)
 	key := GetEncryptionKey()
 	plaintext := "API_KEY=secret_123456789\nDATABASE_URL=postgres://user:pass@localhost:5432/db"
 
@@ -29,22 +35,17 @@ func TestEncryptDecryptEnv_Success(t *testing.T) {
 }
 
 func TestGetEncryptionKey_Length(t *testing.T) {
-	key := GetEncryptionKey()
-	if len(key) != 32 {
-		t.Fatalf("expected 32-byte key length, got %d", len(key))
-	}
-
-	// Test with explicit environment variable set
 	os.Setenv("SECRET_KEY", "short_key")
 	defer os.Unsetenv("SECRET_KEY")
 
-	envKey := GetEncryptionKey()
-	if len(envKey) != 32 {
-		t.Fatalf("expected padded 32-byte key length, got %d", len(envKey))
+	key := GetEncryptionKey()
+	if len(key) != 32 {
+		t.Fatalf("expected 32-byte SHA-256 derived key, got %d", len(key))
 	}
 }
 
 func TestDecryptEnv_InvalidBase64(t *testing.T) {
+	setTestKey(t)
 	key := GetEncryptionKey()
 	_, err := DecryptEnv("invalid-base64!!!", key)
 	if err == nil {
@@ -53,6 +54,7 @@ func TestDecryptEnv_InvalidBase64(t *testing.T) {
 }
 
 func TestDecryptEnv_CiphertextTooShort(t *testing.T) {
+	setTestKey(t)
 	key := GetEncryptionKey()
 	// Valid base64, but decoded payload is shorter than nonce size (12 bytes)
 	_, err := DecryptEnv("aGVsbG8=", key) // "hello" in base64 (5 bytes)

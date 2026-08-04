@@ -20,7 +20,7 @@ import (
 
 type Service interface {
 	GetTask(ctx context.Context, taskId string) (Task, error)
-	GetTasks(ctx context.Context, machineID string, taskUnit TaskUnit, allowedSlugs []string) ([]Task, error)
+	GetTasks(ctx context.Context, machineID string, taskUnits []TaskUnit, allowedSlugs []string) ([]Task, error)
 	FailTask(ctx context.Context, id uuid.UUID, lastError json.RawMessage, timestamp time.Time) (uuid.UUID, uuid.UUID, error)
 	CompleteTask(ctx context.Context, id uuid.UUID, timestamp time.Time, outputPayload json.RawMessage) (uuid.UUID, uuid.UUID, error)
 	CreateTask(ctx context.Context, payloadSlug string, payload json.RawMessage, runID *uuid.UUID, stepID *uuid.UUID, workflowID *uuid.UUID, unit *TaskUnit, chainTask bool) (uuid.UUID, error)

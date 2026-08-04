@@ -41,4 +41,12 @@ func (n *NoopTelemetry) TraceStart(ctx context.Context, name string) (context.Co
 	return trace_noop.NewTracerProvider().Tracer(n.cfg.ServiceName).Start(ctx, name)
 }
 
+func (n *NoopTelemetry) SubscribeLogs() chan string {
+	ch := make(chan string)
+	close(ch)
+	return ch
+}
+
+func (n *NoopTelemetry) UnsubscribeLogs(ch chan string) {}
+
 func (n *NoopTelemetry) Shutdown(ctx context.Context) {}
