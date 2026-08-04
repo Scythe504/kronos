@@ -10,12 +10,12 @@ var (
 	// Task Metrics
 	MetricTasksPulled = Metric{
 		Name:        "kronos_tasks_pulled_total",
-		Unit:        "1",
+		Unit:        "{count}",
 		Description: "Total number of tasks pulled/leased by nodes",
 	}
 	MetricTasksFailed = Metric{
 		Name:        "kronos_tasks_failed_total",
-		Unit:        "1",
+		Unit:        "{count}",
 		Description: "Total number of tasks that failed execution",
 	}
 	MetricTaskExecutionDuration = Metric{
@@ -30,7 +30,7 @@ var (
 	}
 	MetricTaskRetries = Metric{
 		Name:        "kronos_task_retries_total",
-		Unit:        "1",
+		Unit:        "{count}",
 		Description: "Total number of task execution retries",
 	}
 
@@ -42,7 +42,7 @@ var (
 	}
 	MetricActiveWorkers = Metric{
 		Name:        "kronos_active_workers",
-		Unit:        "1",
+		Unit:        "{count}",
 		Description: "Current number of active worker processes running on the node",
 	}
 
@@ -61,5 +61,19 @@ var (
 		Name:        "kronos_node_gpu_utilization",
 		Unit:        "percent",
 		Description: "Current node GPU utilization percentage",
+	}
+
+	// Measures Requests being processed by the server
+	MetricRequestsInFlight = Metric{
+		Name: "kronos_master_requests_inflight",
+		Unit: "{count}",
+		Description: "Measures the number of requests currently being processed by the server",
+	}
+
+	// Measures latency of each request
+	MetricRequestDurationMillis = Metric{
+		Name: "kronos_master_request_duration_ms",
+		Unit: "ms",
+		Description: "Measures the latency of HTTP requests processed by the server, in milliseconds",
 	}
 )

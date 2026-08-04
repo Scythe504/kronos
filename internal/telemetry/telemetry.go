@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	// "net/http"
 	"os"
 
 	"go.opentelemetry.io/contrib/bridges/otelslog"
@@ -17,9 +16,9 @@ import (
 
 type TelemetryProvider interface {
 	GetServiceName() string
-	LogInfo(msg string, args ...any)
-	LogErrorln(msg string, args ...any)
-	LogFatalln(msg string, args ...any)
+	LogInfo(ctx context.Context, msg string, args ...any)
+	LogErrorln(ctx context.Context, msg string, args ...any)
+	LogFatalln(ctx context.Context, msg string, args ...any)
 	MeterInt64Counter(metric Metric) (otelmetric.Int64Counter, error)
 	MeterInt64Histogram(metric Metric) (otelmetric.Int64Histogram, error)
 	MeterInt64UpDownCounter(metric Metric) (otelmetric.Int64UpDownCounter, error)
@@ -84,16 +83,16 @@ func (t *Telemetry) GetServiceName() string {
 	return t.cfg.ServiceName
 }
 
-func (t *Telemetry) LogInfo(msg string, args ...any) {
-	t.log.Info(msg, args...)
+func (t *Telemetry) LogInfo(ctx context.Context, msg string, args ...any) {
+	t.log.InfoContext(ctx, msg, args...)
 }
 
-func (t *Telemetry) LogErrorln(msg string, args ...any) {
-	t.log.Error(msg, args...)
+func (t *Telemetry) LogErrorln(ctx context.Context, msg string, args ...any) {
+	t.log.ErrorContext(ctx, msg, args...)
 }
 
-func (t *Telemetry) LogFatalln(msg string, args ...any) {
-	t.log.Error(msg, args...)
+func (t *Telemetry) LogFatalln(ctx context.Context, msg string, args ...any) {
+	t.log.ErrorContext(ctx, msg, args...)
 	os.Exit(1)
 }
 
