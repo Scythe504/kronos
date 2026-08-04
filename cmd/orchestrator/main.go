@@ -27,9 +27,12 @@ func main() {
 	if err != nil {
 		log.Fatal("[ERR_TELEMETRY_CFG_FAIL]:", err)
 	}
-	tel, err := telemetry.NewTelemetry(ctx, telCfg)
+	// Initialize telemetry with fallback
+	var tel telemetry.TelemetryProvider
+	tel, err = telemetry.NewTelemetry(ctx, telCfg)
 	if err != nil {
-		log.Fatal("[ERR_TELEMETRY_INIT_FAIL]:", err)
+		log.Println("[WARN] Failed to create telemetry, falling back to no-op telemetry:", err)
+		tel, _ = telemetry.NewNoopTelemetry(telCfg)
 	}
 	defer tel.Shutdown(ctx)
 
@@ -60,7 +63,7 @@ func main() {
 		log.Println("[WARN_TELEMETRY_STATS_FAIL]:", err)
 	}
 
-	p := pipeline.Init(db, id)
+	p := pipeline.Init(db, id, tel)
 
 	cronSched := cron.NewScheduler(db)
 	wg.Go(func() { cronSched.Start(ctx) })
