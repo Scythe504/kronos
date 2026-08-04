@@ -11,8 +11,8 @@ import (
 	"github.com/go-git/go-git/v6/storage/memory"
 )
 
-// FormatAuthenticatedURL embeds username/token credentials into HTTPS repo URLs
-func FormatAuthenticatedURL(rawURL string, username string, token string) string {
+// formatAuthenticatedURL embeds username/token credentials into HTTPS repo URLs
+func formatAuthenticatedURL(rawURL string, username string, token string) string {
 	if token == "" && username == "" {
 		return rawURL
 	}

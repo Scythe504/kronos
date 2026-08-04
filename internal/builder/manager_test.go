@@ -1,11 +1,10 @@
-package builder_test
+package builder
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/scythe504/kronos/internal/builder"
 	"github.com/scythe504/kronos/internal/telemetry"
 )
 
@@ -16,7 +15,7 @@ func TestNewManager_DirectoryCreation(t *testing.T) {
 	}
 	defer os.RemoveAll(tempRootDir)
 
-	cfg := builder.BuilderConfig{
+	cfg := BuilderConfig{
 		RootDir:            filepath.Join(tempRootDir, "builds"),
 		CacheDir:           filepath.Join(tempRootDir, "cache"),
 		TargetOS:           "linux",
@@ -25,7 +24,7 @@ func TestNewManager_DirectoryCreation(t *testing.T) {
 	}
 
 	tel := &telemetry.NoopTelemetry{}
-	mgr, err := builder.NewManager(cfg, tel)
+	mgr, err := NewManager(cfg, tel)
 	if err != nil {
 		t.Fatalf("NewManager error = %v", err)
 	}

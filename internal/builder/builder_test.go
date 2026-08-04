@@ -1,4 +1,4 @@
-package builder_test
+package builder
 
 import (
 	"os"
@@ -10,7 +10,6 @@ import (
 
 	"github.com/go-git/go-git/v6"
 	"github.com/go-git/go-git/v6/plumbing/object"
-	"github.com/scythe504/kronos/internal/builder"
 	"github.com/scythe504/kronos/internal/database"
 	"github.com/scythe504/kronos/internal/telemetry"
 )
@@ -72,7 +71,7 @@ func TestBuildWorker_EmptyRepoURL(t *testing.T) {
 		RepoURL: "",
 	}
 
-	_, err := builder.BuildWorker(t.Context(), worker, tel)
+	_, err := BuildWorker(t.Context(), worker, tel)
 	if err == nil {
 		t.Fatalf("expected error for empty repo_url, got nil")
 	}
@@ -86,7 +85,7 @@ func TestBuildWorker_InvalidGitURL(t *testing.T) {
 		RepoURL: "https://invalid-domain.example.com/nonexistent/repo.git",
 	}
 
-	_, err := builder.BuildWorker(t.Context(), worker, tel)
+	_, err := BuildWorker(t.Context(), worker, tel)
 	if err == nil {
 		t.Fatalf("expected clone error for invalid repo URL, got nil")
 	}
@@ -106,7 +105,7 @@ func TestBuildWorker_WithBuildCommands(t *testing.T) {
 	}
 
 	tel := &telemetry.NoopTelemetry{}
-	_, err := builder.BuildWorker(t.Context(), worker, tel)
+	_, err := BuildWorker(t.Context(), worker, tel)
 	if err == nil {
 		t.Fatalf("expected clone error for invalid git URL, got nil")
 	}
@@ -144,7 +143,7 @@ func TestBuildWorker_RealRepoIntegration(t *testing.T) {
 		RepoURL: repoDir,
 	}
 
-	res, err := builder.BuildWorker(t.Context(), worker, tel)
+	res, err := BuildWorker(t.Context(), worker, tel)
 	if err != nil {
 		t.Fatalf("BuildWorker failed for real local repo: %v", err)
 	}
@@ -188,9 +187,9 @@ func TestComputeBuildCacheKey(t *testing.T) {
 		RunCommand:      &runCmd,
 	}
 
-	key1 := builder.ComputeBuildCacheKey(w1)
-	key2 := builder.ComputeBuildCacheKey(w2)
-	key3 := builder.ComputeBuildCacheKey(w3)
+	key1 := ComputeBuildCacheKey(w1)
+	key2 := ComputeBuildCacheKey(w2)
+	key3 := ComputeBuildCacheKey(w3)
 
 	if key1 != key2 {
 		t.Fatalf("expected identical cache keys for identical workers, got %s vs %s", key1, key2)

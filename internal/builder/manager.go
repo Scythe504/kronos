@@ -81,7 +81,7 @@ func (m *Manager) Build(ctx context.Context, worker database.Worker) (*BuildWork
 	m.tel.LogInfo(ctx, "Starting worker git clone", "slug", worker.Slug, "repo_url", worker.RepoURL, "repo_ref", worker.RepoRef, "target_dir", workspaceDir)
 
 	user, token := resolveGitCredentials(worker.EnvVars)
-	cloneURL := FormatAuthenticatedURL(worker.RepoURL, user, token)
+	cloneURL := formatAuthenticatedURL(worker.RepoURL, user, token)
 
 	if err := CloneRepo(ctx, cloneURL, worker.RepoRef, workspaceDir); err != nil {
 		if !m.config.KeepBuildArtifacts {
