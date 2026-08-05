@@ -55,7 +55,7 @@ func RegisterOrInitNode(ctx context.Context, nodeCfg *database.Node, dbURL, mast
 			return nil, "", fmt.Errorf("master node init marshal failed: %w", err)
 		}
 
-		resp, err := http.Post(strings.TrimRight(masterURL, "/")+"/nodes/init", "application/json", bytes.NewReader(reqBytes))
+		resp, err := http.Post(strings.TrimRight(masterURL, "/")+"/api/v1/nodes/init", "application/json", bytes.NewReader(reqBytes))
 		if err != nil {
 			return nil, "", fmt.Errorf("master node init http request failed: %w", err)
 		}
