@@ -18,14 +18,6 @@ else
   MASTER_URL=${MASTER_URL:-$DEFAULT_MASTER_URL}
 fi
 
-# 2. Resolve Agent Secret (Environment variable or prompt)
-if [ -n "$KRONOS_AGENT_SECRET" ]; then
-  AGENT_SECRET="$KRONOS_AGENT_SECRET"
-else
-  read -sp "Enter Node AGENT_SECRET: " AGENT_SECRET
-  echo ""
-fi
-
 # 3. Resolve Allowed Slugs (Default empty -> Master auto-assigns)
 ALLOWED_SLUGS="${KRONOS_ALLOWED_SLUGS:-}"
 
@@ -51,7 +43,6 @@ CONF_FILE="$CONFIG_DIR/agent.conf"
 cat << EOF > "$CONF_FILE"
 # Kronos Node Agent Configuration
 MASTER_URL=$MASTER_URL
-AGENT_SECRET=$AGENT_SECRET
 ALLOWED_SLUGS=$ALLOWED_SLUGS
 TASK_UNIT=$TASK_UNIT
 EOF

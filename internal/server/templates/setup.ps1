@@ -12,13 +12,6 @@ if (-not $MasterURL) {
 }
 
 # 2. Resolve Agent Secret
-$AgentSecret = $env:KRONOS_AGENT_SECRET
-if (-not $AgentSecret) {
-    $AgentSecret = Read-Host "Enter Node AGENT_SECRET" -AsSecureString
-    $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($AgentSecret)
-    $AgentSecret = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
-}
-
 # 3. Resolve Allowed Slugs & Task Unit
 $AllowedSlugs = $env:KRONOS_ALLOWED_SLUGS
 $TaskUnit = $env:KRONOS_TASK_UNIT
@@ -35,7 +28,6 @@ $ConfFile = Join-Path $ConfigDir "agent.conf"
 $ConfContent = @"
 # Kronos Node Agent Configuration
 MASTER_URL=$MasterURL
-AGENT_SECRET=$AgentSecret
 ALLOWED_SLUGS=$AllowedSlugs
 TASK_UNIT=$TaskUnit
 "@

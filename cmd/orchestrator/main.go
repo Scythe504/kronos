@@ -4,20 +4,14 @@ import (
 	"context"
 	"log"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
-	"github.com/google/uuid"
-	_ "github.com/joho/godotenv/autoload"
 	"github.com/scythe504/kronos/internal/builder"
 	"github.com/scythe504/kronos/internal/cron"
-	"github.com/scythe504/kronos/internal/database"
 	"github.com/scythe504/kronos/internal/nodes"
 	"github.com/scythe504/kronos/internal/pipeline"
 	"github.com/scythe504/kronos/internal/telemetry"
-	"github.com/scythe504/kronos/internal/utils"
 )
 
 func main() {
@@ -30,7 +24,7 @@ func main() {
 	if err != nil {
 		log.Fatal("[ERR_TELEMETRY_CFG_FAIL]:", err)
 	}
-	// Initialize telemetry with fallback
+
 	var tel telemetry.TelemetryProvider
 	tel, err = telemetry.NewTelemetry(ctx, telCfg)
 	if err != nil {
@@ -39,28 +33,18 @@ func main() {
 	}
 	defer tel.Shutdown(ctx)
 
-	dbCtx, dbCancel := context.WithTimeout(ctx, 10*time.Second)
-	defer dbCancel()
-	db := database.New(dbCtx)
+	// Load configuration from OS-native agent.conf if available
+	nodes.LoadAgentConfig()
 
-	nodeCfg := nodes.GetNodeConfig(ctx)
-	nodeCfg.TaskUnit = database.TaskUnitCPU
+	dbURL := os.Getenv("DB_URL")
+	masterURL := os.Getenv("MASTER_URL")
 
-	nodeIDPath := utils.GetNodeIDFilePath()
-	if data, err := os.ReadFile(nodeIDPath); err == nil {
-		if parsed, err := uuid.Parse(strings.TrimSpace(string(data))); err == nil {
-			nodeCfg.ID = &parsed
-		}
-	}
+	nodeCfg := nodes.InitNodeConfig(ctx)
 
-	id, err := db.RegisterNode(dbCtx, *nodeCfg)
+	db, id, err := nodes.RegisterOrInitNode(ctx, nodeCfg, dbURL, masterURL)
 	if err != nil {
-		log.Fatal("[ERR_DAEMON_REG_FAIL]:", err)
+		log.Fatal("[ERR_NODE_REGISTRATION_FAIL]:", err)
 	}
-
-	// Persist the assigned unique ID locally
-	_ = os.MkdirAll(filepath.Dir(nodeIDPath), 0755)
-	_ = os.WriteFile(nodeIDPath, []byte(id), 0644)
 
 	// Start publishing node resource metrics (CPU/Memory/GPU)
 	if err := nodes.StartSystemStatsPublisher(ctx, id); err != nil {

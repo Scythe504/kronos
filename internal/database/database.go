@@ -69,12 +69,10 @@ var (
 	dbInstance *service
 )
 
-func New(ctx context.Context) Service {
-	if dbInstance != nil {
-		return dbInstance
+func New(ctx context.Context, dbURL string) Service {
+	if dbURL == "" {
+		dbURL = os.Getenv("DB_URL")
 	}
-
-	dbURL := os.Getenv("DB_URL")
 	config, err := pgxpool.ParseConfig(dbURL)
 	if err != nil {
 		log.Fatalf("Parse config failed: %v", err)

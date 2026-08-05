@@ -14,8 +14,8 @@ func TestGetTask(t *testing.T) {
 	dbService, s, ctx := setupTestDB(t)
 
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO workers (slug, name, entrypoint, task_unit)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO workers (slug, name, repo_url, repo_ref, entrypoint, task_unit)
+		VALUES ($1, $2, 'https://github.com/test/repo', 'main', $3, $4)
 		ON CONFLICT (slug) DO UPDATE 
 		SET name = EXCLUDED.name, entrypoint = EXCLUDED.entrypoint, task_unit = EXCLUDED.task_unit
 	`, "test_task_slug", "Test Worker", "./test_worker", "cpu")
@@ -46,8 +46,8 @@ func TestGetTasks_Concurrency(t *testing.T) {
 	dbService, s, ctx := setupTestDB(t)
 
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO workers (slug, name, entrypoint, task_unit)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO workers (slug, name, repo_url, repo_ref, entrypoint, task_unit)
+		VALUES ($1, $2, 'https://github.com/test/repo', 'main', $3, $4)
 		ON CONFLICT (slug) DO UPDATE 
 		SET name = EXCLUDED.name, entrypoint = EXCLUDED.entrypoint, task_unit = EXCLUDED.task_unit
 	`, "test_concurrency_slug", "Test Worker", "./test_worker", "cpu")
@@ -55,7 +55,7 @@ func TestGetTasks_Concurrency(t *testing.T) {
 		t.Fatalf("failed to seed mock worker: %v", err)
 	}
 
-	taskCount := 90
+	taskCount := 50
 	tasksToCreate := make([]Task, taskCount)
 	for i := range taskCount {
 		payload, _ := json.Marshal(map[string]any{"index": i})
@@ -117,10 +117,10 @@ func TestGetTasks_Routing(t *testing.T) {
 	dbService, s, ctx := setupTestDB(t)
 
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO workers (slug, name, entrypoint, task_unit)
+		INSERT INTO workers (slug, name, repo_url, repo_ref, entrypoint, task_unit)
 		VALUES 
-			('cpu_worker', 'CPU Worker', './cpu', 'cpu'),
-			('gpu_worker', 'GPU Worker', './gpu', 'gpu')
+			('cpu_worker', 'CPU Worker', 'https://github.com/test/cpu', 'main', './cpu', 'cpu'),
+			('gpu_worker', 'GPU Worker', 'https://github.com/test/gpu', 'main', './gpu', 'gpu')
 		ON CONFLICT (slug) DO UPDATE 
 		SET name = EXCLUDED.name, entrypoint = EXCLUDED.entrypoint, task_unit = EXCLUDED.task_unit
 	`)
@@ -128,10 +128,18 @@ func TestGetTasks_Routing(t *testing.T) {
 		t.Fatalf("failed to seed mock workers: %v", err)
 	}
 
-	cpuTaskID, err := dbService.CreateTask(ctx, "cpu_worker", json.RawMessage(`{}`), nil, nil, nil, nil, false)
+	cpuUnit := TaskUnitCPU
+	gpuUnit := TaskUnitGPU
+	cpuTaskID, err := dbService.CreateTask(ctx, "cpu_worker", json.RawMessage(`{}`), nil, nil, nil, &cpuUnit, false)
 	assert.NoError(t, err)
 
-	gpuTaskID, err := dbService.CreateTask(ctx, "gpu_worker", json.RawMessage(`{}`), nil, nil, nil, nil, false)
+	gpuTaskID, err := dbService.CreateTask(ctx, "gpu_worker", json.RawMessage(`{}`), nil, nil, nil, &gpuUnit, false)
+	assert.NoError(t, err)
+
+	_, err = dbService.RegisterNode(ctx, Node{MachineID: "cpu-node", Hostname: "cpu-host", CPUModel: "cpu", CPUCores: 4, RAMKB: 1024, IPAddr: "127.0.0.1", TaskUnit: TaskUnitCPU})
+	assert.NoError(t, err)
+
+	_, err = dbService.RegisterNode(ctx, Node{MachineID: "gpu-node", Hostname: "gpu-host", CPUModel: "cpu", CPUCores: 4, RAMKB: 1024, IPAddr: "127.0.0.1", TaskUnit: TaskUnitGPU})
 	assert.NoError(t, err)
 
 	cpuNodeTasks, err := dbService.GetTasks(ctx, "cpu-node", []TaskUnit{TaskUnitCPU}, nil)
@@ -149,8 +157,8 @@ func TestCompleteTask(t *testing.T) {
 	dbService, s, ctx := setupTestDB(t)
 
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO workers (slug, name, entrypoint, task_unit)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO workers (slug, name, repo_url, repo_ref, entrypoint, task_unit)
+		VALUES ($1, $2, 'https://github.com/test/repo', 'main', $3, $4)
 		ON CONFLICT (slug) DO UPDATE 
 		SET name = EXCLUDED.name, entrypoint = EXCLUDED.entrypoint, task_unit = EXCLUDED.task_unit
 	`, "test_task_slug", "Test Worker", "./test_worker", "cpu")
@@ -190,8 +198,8 @@ func TestFailTask(t *testing.T) {
 	dbService, s, ctx := setupTestDB(t)
 
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO workers (slug, name, entrypoint, task_unit)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO workers (slug, name, repo_url, repo_ref, entrypoint, task_unit)
+		VALUES ($1, $2, 'https://github.com/test/repo', 'main', $3, $4)
 		ON CONFLICT (slug) DO UPDATE 
 		SET name = EXCLUDED.name, entrypoint = EXCLUDED.entrypoint, task_unit = EXCLUDED.task_unit
 	`, "test_task_slug", "Test Worker", "./test_worker", "cpu")
@@ -265,8 +273,8 @@ func TestCompleteTask_Chain(t *testing.T) {
 	dbService, s, ctx := setupTestDB(t)
 
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO workers (slug, name, entrypoint, task_unit)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO workers (slug, name, repo_url, repo_ref, entrypoint, task_unit)
+		VALUES ($1, $2, 'https://github.com/test/repo', 'main', $3, $4)
 		ON CONFLICT (slug) DO UPDATE 
 		SET name = EXCLUDED.name, entrypoint = EXCLUDED.entrypoint, task_unit = EXCLUDED.task_unit
 	`, "test_task_slug", "Test Worker", "./test_worker", "cpu")

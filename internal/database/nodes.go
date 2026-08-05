@@ -219,11 +219,11 @@ func (s *service) UpdateNodeLastHBeat(ctx context.Context, nodeID string) (strin
 func (s *service) ReapDeadNodes(ctx context.Context, threshold time.Duration) (int64, error) {
 	query := `UPDATE nodes 
 		SET status = 'dead'::node_status, updated_at = now()
-		WHERE last_heartbeat_at < now() - ($1 || ' seconds')::interval
+		WHERE last_heartbeat_at < now() - ($1 * interval '1 second')
 		  AND status != 'dead'::node_status
 		  AND status != 'inactive'::node_status
 	`
-	tag, err := s.pool.Exec(ctx, query, threshold.Seconds())
+	tag, err := s.pool.Exec(ctx, query, int64(threshold.Seconds()))
 	if err != nil {
 		return 0, err
 	}

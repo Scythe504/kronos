@@ -35,6 +35,7 @@ type nodeInitRequest struct {
 type nodeInitResponse struct {
 	NodeID       string   `json:"node_id"`
 	DBURL        string   `json:"db_url"`
+	SecretKey    []byte   `json:"secret_key"`
 	AllowedSlugs []string `json:"allowed_slugs"`
 	TaskUnit     string   `json:"task_unit"`
 }
@@ -51,16 +52,6 @@ func (s *Server) initNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer r.Body.Close()
-
-	expectedSecret := os.Getenv("AGENT_SECRET")
-	if expectedSecret == "" {
-		expectedSecret = os.Getenv("NODE_SECRET")
-	}
-	if expectedSecret != "" && reqBody.Secret != expectedSecret {
-		s.tel.LogInfo(r.Context(), "Node init secret mismatch", "path", r.URL.Path, "httpCode", http.StatusUnauthorized)
-		utils.WriteError(w, http.StatusUnauthorized, "Invalid Node Secret")
-		return
-	}
 
 	unit := database.TaskUnit(reqBody.TaskUnit)
 	if unit == "" {
@@ -120,12 +111,14 @@ func (s *Server) initNode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	dbURL := os.Getenv("DB_URL")
+	secretKey := os.Getenv("SECRET_KEY")
 
 	s.tel.LogInfo(r.Context(), "Node registered successfully", "node_id", registeredID, "machine_id", reqBody.MachineID)
 
 	utils.WriteJSON(w, http.StatusOK, nodeInitResponse{
 		NodeID:       registeredID,
 		DBURL:        dbURL,
+		SecretKey:    []byte(secretKey),
 		AllowedSlugs: allowedSlugs,
 		TaskUnit:     string(unit),
 	})

@@ -29,7 +29,7 @@ func NewServer(db database.Service, tel telemetry.TelemetryProvider) *Server {
 }
 
 func New(ctx context.Context, tel telemetry.TelemetryProvider) *http.Server {
-	srv := NewServer(database.New(ctx), tel)
+	srv := NewServer(database.New(ctx, ""), tel)
 
 	r := reaper.New(srv.db, tel, reaper.Config{})
 	go r.Start(ctx)

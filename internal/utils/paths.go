@@ -7,22 +7,20 @@ import (
 )
 
 // GetKronosConfigDir returns the OS-native root directory for Kronos configuration files.
-// - Windows: %APPDATA%\Kronos
-// - Linux: /etc/kronos (if root or directory exists) or ~/.kronos
-// - macOS: ~/Library/Application Support/Kronos or ~/.kronos
 func GetKronosConfigDir() string {
 	if envDir := os.Getenv("KRONOS_CONFIG_DIR"); envDir != "" {
 		return envDir
 	}
 
-	if runtime.GOOS == "windows" {
+	switch runtime.GOOS {
+	case "windows":
 		if appData := os.Getenv("APPDATA"); appData != "" {
 			return filepath.Join(appData, "Kronos")
 		}
 		if configDir, err := os.UserConfigDir(); err == nil {
 			return filepath.Join(configDir, "Kronos")
 		}
-	} else if runtime.GOOS == "linux" {
+	case "linux":
 		if fi, err := os.Stat("/etc/kronos"); err == nil && fi.IsDir() {
 			return "/etc/kronos"
 		}
@@ -39,15 +37,11 @@ func GetKronosConfigDir() string {
 }
 
 // GetNodeIDFilePath returns the OS-native file path for the persisted node_id.
-// - Windows: %APPDATA%\Kronos\.node_id
-// - Linux: /etc/kronos/.node_id (or ~/.kronos/.node_id)
 func GetNodeIDFilePath() string {
 	return filepath.Join(GetKronosConfigDir(), ".node_id")
 }
 
 // GetAgentConfigFilePath returns the OS-native file path for agent.conf.
-// - Windows: %APPDATA%\Kronos\agent.conf
-// - Linux: /etc/kronos/agent.conf (or ~/.kronos/agent.conf)
 func GetAgentConfigFilePath() string {
 	return filepath.Join(GetKronosConfigDir(), "agent.conf")
 }

@@ -638,11 +638,11 @@ func (s *service) ReapStuckTasks(ctx context.Context, threshold time.Duration) (
 	query := `UPDATE tasks
 		SET status = 'queued'::task_status, next_retry_at = NULL, updated_at = now()
 		WHERE status = 'running'::task_status
-		  AND updated_at < now() - ($1 || ' seconds')::interval
+		  AND updated_at < now() - ($1 * interval '1 second')
 		  AND retry_count < max_retry_count
 		  AND deleted_at IS NULL
 	`
-	tag, err := s.pool.Exec(ctx, query, threshold.Seconds())
+	tag, err := s.pool.Exec(ctx, query, int64(threshold.Seconds()))
 	if err != nil {
 		return 0, err
 	}

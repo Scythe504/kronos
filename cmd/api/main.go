@@ -63,6 +63,7 @@ func main() {
 		log.Fatal("[ERR_TELEMETRY_CFG_FAIL]:", err)
 	}
 
+	telCfg.ServiceName = "kronos-master"
 	// Initialize telemetry with fallback
 	var tel telemetry.TelemetryProvider
 	tel, err = telemetry.NewTelemetry(ctx, telCfg)

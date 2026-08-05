@@ -8,82 +8,45 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/joho/godotenv"
 	rcron "github.com/robfig/cron/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
-	"path/filepath"
 )
 
 // setupTestDB handles environment setup and database initialization with Testcontainers fallback.
 func setupTestDB(t *testing.T) (Service, *service, context.Context) {
 	ctx := context.Background()
 
-	envPath := ".env"
-	for range 5 {
-		if _, err := os.Stat(envPath); err == nil {
-			_ = godotenv.Load(envPath)
-			break
-		}
-		envPath = filepath.Join("..", envPath)
+	pgContainer, err := postgres.Run(ctx,
+		"postgres:17",
+		postgres.WithDatabase("kronos_test"),
+		postgres.WithUsername("postgres"),
+		postgres.WithPassword("password"),
+		testcontainers.WithWaitStrategy(
+			wait.ForLog("database system is ready to accept connections").
+				WithOccurrence(2).
+				WithStartupTimeout(15*time.Second),
+		),
+	)
+	if err != nil {
+		t.Fatalf("failed to start postgres container: %v", err)
 	}
-
-	dbURL := os.Getenv("DB_URL")
-	var pgContainer *postgres.PostgresContainer
-
-	useTestcontainers := false
-	if dbURL == "" {
-		useTestcontainers = true
-	} else {
-		config, err := pgxpool.ParseConfig(dbURL)
-		if err == nil {
-			pool, err := pgxpool.NewWithConfig(ctx, config)
-			if err == nil {
-				err = pool.Ping(ctx)
-				pool.Close()
-			}
-			if err != nil {
-				useTestcontainers = true
-			}
-		} else {
-			useTestcontainers = true
+	t.Cleanup(func() {
+		if err := testcontainers.TerminateContainer(pgContainer); err != nil {
+			t.Fatalf("failed to terminate container: %v", err)
 		}
+	})
+
+	dbURL, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+	if err != nil {
+		t.Fatalf("failed to get connection string: %v", err)
 	}
+	t.Setenv("DB_URL", dbURL)
+	os.Setenv("DB_URL", dbURL)
 
-	if useTestcontainers {
-		var err error
-		pgContainer, err = postgres.Run(ctx,
-			"postgres:17-alpine",
-			postgres.WithDatabase("kronos_test"),
-			postgres.WithUsername("postgres"),
-			postgres.WithPassword("password"),
-			testcontainers.WithWaitStrategy(
-				wait.ForLog("database system is ready to accept connections").
-					WithOccurrence(2).
-					WithStartupTimeout(15*time.Second),
-			),
-		)
-		if err != nil {
-			t.Fatalf("failed to start postgres container: %v", err)
-		}
-		t.Cleanup(func() {
-			if err := testcontainers.TerminateContainer(pgContainer); err != nil {
-				t.Fatalf("failed to terminate container: %v", err)
-			}
-		})
-
-		dbURL, err = pgContainer.ConnectionString(ctx, "sslmode=disable")
-		if err != nil {
-			t.Fatalf("failed to get connection string: %v", err)
-		}
-		t.Setenv("DB_URL", dbURL)
-		os.Setenv("DB_URL", dbURL)
-	}
-
-	dbService := New(ctx)
+	dbService := New(ctx, dbURL)
 	s := dbService.(*service)
 
 	// Clean up tables to ensure test independence
@@ -96,8 +59,8 @@ func TestCreateWorkflowTemplate(t *testing.T) {
 	dbService, s, ctx := setupTestDB(t)
 
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO workers (slug, name, entrypoint, task_unit)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO workers (slug, name, repo_url, repo_ref, entrypoint, task_unit)
+		VALUES ($1, $2, 'https://github.com/test/repo', 'main', $3, $4)
 	`, "video_transcode", "Video Transcoder", "./transcoder", "cpu")
 	if err != nil {
 		t.Fatalf("failed to seed mock worker: %v", err)
@@ -149,8 +112,8 @@ func TestTriggerWorkflow(t *testing.T) {
 	dbService, s, ctx := setupTestDB(t)
 
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO workers (slug, name, entrypoint, task_unit)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO workers (slug, name, repo_url, repo_ref, entrypoint, task_unit)
+		VALUES ($1, $2, 'https://github.com/test/repo', 'main', $3, $4)
 		ON CONFLICT (slug) DO UPDATE 
 		SET name = EXCLUDED.name, entrypoint = EXCLUDED.entrypoint, task_unit = EXCLUDED.task_unit
 	`, "test_slug", "Test Worker", "./test_worker", "cpu")
@@ -255,8 +218,8 @@ func TestTriggerDueCronWorkflows(t *testing.T) {
 	dbService, s, ctx := setupTestDB(t)
 
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO workers (slug, name, entrypoint, task_unit)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO workers (slug, name, repo_url, repo_ref, entrypoint, task_unit)
+		VALUES ($1, $2, 'https://github.com/test/repo', 'main', $3, $4)
 		ON CONFLICT (slug) DO UPDATE 
 		SET name = EXCLUDED.name, entrypoint = EXCLUDED.entrypoint, task_unit = EXCLUDED.task_unit
 	`, "test_slug", "Test Worker", "./test_worker", "cpu")
