@@ -1,3 +1,4 @@
+-- +goose Up
 CREATE TYPE task_unit AS ENUM ('cpu', 'gpu');
 CREATE TABLE IF NOT EXISTS workers (
   slug VARCHAR(255) PRIMARY KEY,

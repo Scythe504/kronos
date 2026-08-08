@@ -60,7 +60,26 @@ func StartSystemStatsPublisher(ctx context.Context, nodeID string) error {
 		return err
 	}
 
-	// 3. GPU Utilization Gauge
+	// 3. Memory Utilization Gauge (Percentage)
+	_, err = meter.Float64ObservableGauge(
+		telemetry.MetricNodeMemoryUtilization.Name,
+		metric.WithDescription(telemetry.MetricNodeMemoryUtilization.Description),
+		metric.WithUnit(telemetry.MetricNodeMemoryUtilization.Unit),
+		metric.WithFloat64Callback(func(ctx context.Context, obs metric.Float64Observer) error {
+			vmem, err := mem.VirtualMemoryWithContext(ctx)
+			if err == nil {
+				obs.Observe(vmem.UsedPercent, attrs)
+			} else {
+				slog.ErrorContext(ctx, "Failed to collect memory utilization percentage metric", slog.Any("error", err))
+			}
+			return nil
+		}),
+	)
+	if err != nil {
+		return err
+	}
+
+	// 4. GPU Utilization Gauge
 	_, err = meter.Float64ObservableGauge(
 		telemetry.MetricNodeGPUUtilization.Name,
 		metric.WithDescription(telemetry.MetricNodeGPUUtilization.Description),

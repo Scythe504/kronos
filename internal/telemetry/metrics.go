@@ -57,6 +57,11 @@ var (
 		Unit:        "By",
 		Description: "Current node memory usage in bytes",
 	}
+	MetricNodeMemoryUtilization = Metric{
+		Name:        "kronos_node_memory_utilization",
+		Unit:        "percent",
+		Description: "Current node memory utilization percentage",
+	}
 	MetricNodeGPUUtilization = Metric{
 		Name:        "kronos_node_gpu_utilization",
 		Unit:        "percent",
