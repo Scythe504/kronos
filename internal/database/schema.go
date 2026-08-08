@@ -61,9 +61,6 @@ type Worker struct {
 	RepoURL            string       `db:"repo_url" json:"repo_url"`
 	RepoRef            string       `db:"repo_ref" json:"repo_ref"`
 	EnvVars            []byte       `db:"env_vars" json:"env_vars,omitempty"`
-	PreBuildCommand    *string      `db:"pre_build_command" json:"pre_build_command,omitempty"`
-	BuildCommand       *string      `db:"build_command" json:"build_command,omitempty"`
-	RunCommand         *string      `db:"run_command" json:"run_command,omitempty"`
 	DockerfilePath     *string      `db:"dockerfile_path" json:"dockerfile_path,omitempty"`
 	Entrypoint         string       `db:"entrypoint" json:"entrypoint"`
 	TaskUnit           TaskUnit     `db:"task_unit" json:"task_unit"`

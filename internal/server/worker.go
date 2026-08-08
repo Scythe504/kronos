@@ -21,9 +21,6 @@ type workerRequest struct {
 	RepoRef            string `json:"repo_ref,omitempty"`
 	EnvVars            string `json:"env,omitempty"`
 	EnvVarsAlt         string `json:"env_vars,omitempty"`
-	PreBuildCommand    string `json:"pre_build_command,omitempty"`
-	BuildCommand       string `json:"build_command,omitempty"`
-	RunCommand         string `json:"run_command,omitempty"`
 	DockerfilePath     string `json:"dockerfile_path,omitempty"`
 	Entrypoint         string `json:"entrypoint,omitempty"`
 	TaskUnit           string `json:"task_unit,omitempty"`
@@ -62,18 +59,6 @@ func (s *Server) createWorker(w http.ResponseWriter, r *http.Request) {
 		taskUnit = database.TaskUnitCPU
 	}
 
-	var preBuildCmd *string
-	if reqBody.PreBuildCommand != "" {
-		preBuildCmd = &reqBody.PreBuildCommand
-	}
-	var buildCmd *string
-	if reqBody.BuildCommand != "" {
-		buildCmd = &reqBody.BuildCommand
-	}
-	var runCmd *string
-	if reqBody.RunCommand != "" {
-		runCmd = &reqBody.RunCommand
-	}
 	var dockerfilePath *string
 	if reqBody.DockerfilePath != "" {
 		dockerfilePath = &reqBody.DockerfilePath
@@ -112,9 +97,6 @@ func (s *Server) createWorker(w http.ResponseWriter, r *http.Request) {
 		RepoURL:            reqBody.RepoUrl,
 		RepoRef:            reqBody.RepoRef,
 		EnvVars:            envBytes,
-		PreBuildCommand:    preBuildCmd,
-		BuildCommand:       buildCmd,
-		RunCommand:         runCmd,
 		DockerfilePath:     dockerfilePath,
 		Entrypoint:         reqBody.Entrypoint,
 		TaskUnit:           taskUnit,
@@ -206,18 +188,6 @@ func (s *Server) updateWorker(w http.ResponseWriter, r *http.Request) {
 		taskUnit = database.TaskUnitCPU
 	}
 
-	var preBuildCmd *string
-	if reqBody.PreBuildCommand != "" {
-		preBuildCmd = &reqBody.PreBuildCommand
-	}
-	var buildCmd *string
-	if reqBody.BuildCommand != "" {
-		buildCmd = &reqBody.BuildCommand
-	}
-	var runCmd *string
-	if reqBody.RunCommand != "" {
-		runCmd = &reqBody.RunCommand
-	}
 	var dockerfilePath *string
 	if reqBody.DockerfilePath != "" {
 		dockerfilePath = &reqBody.DockerfilePath
@@ -251,9 +221,6 @@ func (s *Server) updateWorker(w http.ResponseWriter, r *http.Request) {
 		RepoURL:            reqBody.RepoUrl,
 		RepoRef:            reqBody.RepoRef,
 		EnvVars:            envBytes,
-		PreBuildCommand:    preBuildCmd,
-		BuildCommand:       buildCmd,
-		RunCommand:         runCmd,
 		DockerfilePath:     dockerfilePath,
 		Entrypoint:         reqBody.Entrypoint,
 		TaskUnit:           taskUnit,

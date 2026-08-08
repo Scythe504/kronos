@@ -18,7 +18,7 @@ func (s *service) UpsertWorker(ctx context.Context, tx pgx.Tx, workers []Worker)
 	encKey := utils.GetEncryptionKey()
 
 	valueStrings := make([]string, 0, len(workers))
-	valueArgs := make([]any, 0, len(workers)*13)
+	valueArgs := make([]any, 0, len(workers)*10)
 
 	for i, worker := range workers {
 		var encryptedEnv *string
@@ -30,11 +30,11 @@ func (s *service) UpsertWorker(ctx context.Context, tx pgx.Tx, workers []Worker)
 			encryptedEnv = &enc
 		}
 
-		baseParam := i * 13
-		valueStrings = append(valueStrings, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)",
+		baseParam := i * 10
+		valueStrings = append(valueStrings, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)",
 			baseParam+1, baseParam+2, baseParam+3, baseParam+4,
 			baseParam+5, baseParam+6, baseParam+7, baseParam+8,
-			baseParam+9, baseParam+10, baseParam+11, baseParam+12, baseParam+13,
+			baseParam+9, baseParam+10,
 		))
 
 		valueArgs = append(valueArgs,
@@ -44,9 +44,6 @@ func (s *service) UpsertWorker(ctx context.Context, tx pgx.Tx, workers []Worker)
 			worker.RepoURL,
 			worker.RepoRef,
 			encryptedEnv,
-			worker.PreBuildCommand,
-			worker.BuildCommand,
-			worker.RunCommand,
 			worker.DockerfilePath,
 			worker.Entrypoint,
 			worker.TaskUnit,
@@ -56,8 +53,7 @@ func (s *service) UpsertWorker(ctx context.Context, tx pgx.Tx, workers []Worker)
 
 	upsertWorkerQuery := fmt.Sprintf(`INSERT INTO workers (
 		slug, name, description, repo_url,
-		repo_ref, env_vars, pre_build_command, build_command,
-		run_command, dockerfile_path, entrypoint, task_unit,
+		repo_ref, env_vars, dockerfile_path, entrypoint, task_unit,
 		task_timeout_seconds
 	) VALUES %s
 		ON CONFLICT (slug)
@@ -67,9 +63,6 @@ func (s *service) UpsertWorker(ctx context.Context, tx pgx.Tx, workers []Worker)
 		    repo_url = EXCLUDED.repo_url, 
 		    repo_ref = EXCLUDED.repo_ref,
 		    env_vars = EXCLUDED.env_vars, 
-		    pre_build_command = EXCLUDED.pre_build_command,
-		    build_command = EXCLUDED.build_command,
-		    run_command = EXCLUDED.run_command,
 		    dockerfile_path = EXCLUDED.dockerfile_path,
 		    entrypoint = EXCLUDED.entrypoint,
 		    task_unit = EXCLUDED.task_unit,
@@ -116,7 +109,7 @@ func (s *service) UpsertWorker(ctx context.Context, tx pgx.Tx, workers []Worker)
 func (s *service) GetWorker(ctx context.Context, slug string) (Worker, error) {
 	encKey := utils.GetEncryptionKey()
 	query := `
-		SELECT slug, name, description, repo_url, repo_ref, env_vars, pre_build_command, build_command, run_command, dockerfile_path, entrypoint, task_unit, task_timeout_seconds, created_at, updated_at
+		SELECT slug, name, description, repo_url, repo_ref, env_vars, dockerfile_path, entrypoint, task_unit, task_timeout_seconds, created_at, updated_at
 		FROM workers
 		WHERE slug = $1 AND deleted_at IS NULL
 	`
@@ -124,7 +117,7 @@ func (s *service) GetWorker(ctx context.Context, slug string) (Worker, error) {
 	var encryptedEnv []byte
 	err := s.pool.QueryRow(ctx, query, slug).Scan(
 		&w.Slug, &w.Name, &w.Description, &w.RepoURL, &w.RepoRef,
-		&encryptedEnv, &w.PreBuildCommand, &w.BuildCommand, &w.RunCommand, &w.DockerfilePath, &w.Entrypoint,
+		&encryptedEnv, &w.DockerfilePath, &w.Entrypoint,
 		&w.TaskUnit, &w.TaskTimeoutSeconds, &w.CreatedAt, &w.UpdatedAt,
 	)
 	if err != nil {
@@ -151,7 +144,7 @@ func (s *service) GetWorkers(ctx context.Context, page int, perPage int) ([]Work
 	offset := (page - 1) * perPage
 
 	query := `
-		SELECT slug, name, description, repo_url, repo_ref, env_vars, pre_build_command, build_command, run_command, dockerfile_path, entrypoint, task_unit, task_timeout_seconds, created_at, updated_at
+		SELECT slug, name, description, repo_url, repo_ref, env_vars, dockerfile_path, entrypoint, task_unit, task_timeout_seconds, created_at, updated_at
 		FROM workers
 		WHERE deleted_at IS NULL
 		ORDER BY created_at DESC
@@ -170,7 +163,7 @@ func (s *service) GetWorkers(ctx context.Context, page int, perPage int) ([]Work
 		var encryptedEnv []byte
 		if err := rows.Scan(
 			&w.Slug, &w.Name, &w.Description, &w.RepoURL, &w.RepoRef,
-			&encryptedEnv, &w.PreBuildCommand, &w.BuildCommand, &w.RunCommand, &w.DockerfilePath, &w.Entrypoint,
+			&encryptedEnv, &w.DockerfilePath, &w.Entrypoint,
 			&w.TaskUnit, &w.TaskTimeoutSeconds, &w.CreatedAt, &w.UpdatedAt,
 		); err != nil {
 			return nil, err

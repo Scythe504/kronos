@@ -7,9 +7,6 @@ CREATE TABLE IF NOT EXISTS workers (
   repo_url VARCHAR(500) NOT NULL,
   repo_ref VARCHAR(100) NOT NULL,
   env_vars BYTEA,
-  pre_build_command TEXT,
-  build_command TEXT,
-  run_command TEXT,
   dockerfile_path VARCHAR(500),
   entrypoint VARCHAR(500) NOT NULL,  -- path to executable
   task_unit task_unit NOT NULL DEFAULT 'cpu',
