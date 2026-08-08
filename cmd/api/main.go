@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/scythe504/kronos/internal/nodes"
 	"github.com/scythe504/kronos/internal/server"
 	"github.com/scythe504/kronos/internal/telemetry"
 )
@@ -70,6 +71,11 @@ func main() {
 	if err != nil {
 		log.Println("[WARN] Failed to create telemetry, falling back to no-op telemetry:", err)
 		tel, _ = telemetry.NewNoopTelemetry(telCfg)
+	}
+
+	// Start system stats publisher for the master node
+	if err := nodes.StartSystemStatsPublisher(ctx, "kronos-master"); err != nil {
+		log.Println("[WARN] Failed to start system stats publisher for master node:", err)
 	}
 
 	server := server.New(ctx, tel)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/scythe504/kronos/internal/builder"
@@ -19,6 +20,7 @@ type workerRequest struct {
 	RepoUrl            string `json:"repo_url"`
 	RepoRef            string `json:"repo_ref,omitempty"`
 	EnvVars            string `json:"env,omitempty"`
+	EnvVarsAlt         string `json:"env_vars,omitempty"`
 	PreBuildCommand    string `json:"pre_build_command,omitempty"`
 	BuildCommand       string `json:"build_command,omitempty"`
 	RunCommand         string `json:"run_command,omitempty"`
@@ -77,13 +79,39 @@ func (s *Server) createWorker(w http.ResponseWriter, r *http.Request) {
 		dockerfilePath = &reqBody.DockerfilePath
 	}
 
+	rawEnv := reqBody.EnvVars
+	if rawEnv == "" {
+		rawEnv = reqBody.EnvVarsAlt
+	}
+	envBytes := []byte(rawEnv)
+	if len(envBytes) > 0 {
+		// If provided as KEY=VAL plaintext lines, convert to JSON object bytes
+		var testMap map[string]string
+		if err := json.Unmarshal(envBytes, &testMap); err != nil {
+			envMap := make(map[string]string)
+			for line := range strings.SplitSeq(string(envBytes), "\n") {
+				line = strings.TrimSpace(line)
+				if line == "" || strings.HasPrefix(line, "#") {
+					continue
+				}
+				parts := strings.SplitN(line, "=", 2)
+				if len(parts) == 2 {
+					envMap[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+				}
+			}
+			if converted, err := json.Marshal(envMap); err == nil {
+				envBytes = converted
+			}
+		}
+	}
+
 	worker := database.Worker{
 		Slug:               reqBody.Slug,
 		Name:               reqBody.Name,
 		Description:        &reqBody.Description,
 		RepoURL:            reqBody.RepoUrl,
 		RepoRef:            reqBody.RepoRef,
-		EnvVars:            []byte(reqBody.EnvVars),
+		EnvVars:            envBytes,
 		PreBuildCommand:    preBuildCmd,
 		BuildCommand:       buildCmd,
 		RunCommand:         runCmd,
@@ -195,13 +223,34 @@ func (s *Server) updateWorker(w http.ResponseWriter, r *http.Request) {
 		dockerfilePath = &reqBody.DockerfilePath
 	}
 
+	envBytes := []byte(reqBody.EnvVars)
+	if len(envBytes) > 0 {
+		var testMap map[string]string
+		if err := json.Unmarshal(envBytes, &testMap); err != nil {
+			envMap := make(map[string]string)
+			for line := range strings.SplitSeq(string(envBytes), "\n") {
+				line = strings.TrimSpace(line)
+				if line == "" || strings.HasPrefix(line, "#") {
+					continue
+				}
+				parts := strings.SplitN(line, "=", 2)
+				if len(parts) == 2 {
+					envMap[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+				}
+			}
+			if converted, err := json.Marshal(envMap); err == nil {
+				envBytes = converted
+			}
+		}
+	}
+
 	worker := database.Worker{
 		Slug:               reqBody.Slug,
 		Name:               reqBody.Name,
 		Description:        &reqBody.Description,
 		RepoURL:            reqBody.RepoUrl,
 		RepoRef:            reqBody.RepoRef,
-		EnvVars:            []byte(reqBody.EnvVars),
+		EnvVars:            envBytes,
 		PreBuildCommand:    preBuildCmd,
 		BuildCommand:       buildCmd,
 		RunCommand:         runCmd,

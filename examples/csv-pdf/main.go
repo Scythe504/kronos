@@ -35,7 +35,7 @@ type WorkerResult struct {
 	TaskID        string              `json:"task_id"`
 	ResultMessage WorkerResultMessage `json:"result_message"`
 	Error         json.RawMessage     `json:"error,omitempty"`
-	Timestamp     time.Time           `json:"timestamp,omitempty"`
+	Timestamp     time.Time           `json:"timestamp"`
 }
 
 var stdoutMu sync.Mutex
@@ -52,14 +52,12 @@ func main() {
 	var wg sync.WaitGroup
 
 	// Start worker pool
-	for i := 0; i < numWorkers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range numWorkers {
+		wg.Go(func() {
 			for wp := range taskCh {
 				processTask(wp)
 			}
-		}()
+		})
 	}
 
 	scanner := bufio.NewScanner(os.Stdin)

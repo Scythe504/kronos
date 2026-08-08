@@ -523,7 +523,7 @@ func (s *service) CreateTaskChain(ctx context.Context, steps []Step) ([]uuid.UUI
 	}
 
 	var chains []TaskChain
-	for i := 0; i < len(steps); i++ {
+	for i := range steps {
 		currStep := steps[i]
 		currTaskID := stepIndexToTaskID[i]
 
@@ -635,16 +635,31 @@ func (s *service) RetryFailedTasks(ctx context.Context, taskIDs []string) (int64
 }
 
 func (s *service) ReapStuckTasks(ctx context.Context, threshold time.Duration) (int64, error) {
-	query := `UPDATE tasks
-		SET status = 'queued'::task_status, next_retry_at = NULL, updated_at = now()
+	// Requeue stuck running tasks that have retries remaining
+	queryRequeue := `UPDATE tasks
+		SET status = 'queued'::task_status, retry_count = retry_count + 1, next_retry_at = NULL, updated_at = now()
 		WHERE status = 'running'::task_status
 		  AND updated_at < now() - ($1 * interval '1 second')
 		  AND retry_count < max_retry_count
 		  AND deleted_at IS NULL
 	`
-	tag, err := s.pool.Exec(ctx, query, int64(threshold.Seconds()))
+	tagRequeue, err := s.pool.Exec(ctx, queryRequeue, int64(threshold.Seconds()))
 	if err != nil {
 		return 0, err
 	}
-	return tag.RowsAffected(), nil
+
+	// Mark stuck running tasks that exceeded max retries as failed
+	queryFail := `UPDATE tasks
+		SET status = 'failed'::task_status, updated_at = now()
+		WHERE status = 'running'::task_status
+		  AND updated_at < now() - ($1 * interval '1 second')
+		  AND retry_count >= max_retry_count
+		  AND deleted_at IS NULL
+	`
+	tagFail, err := s.pool.Exec(ctx, queryFail, int64(threshold.Seconds()))
+	if err != nil {
+		return tagRequeue.RowsAffected(), err
+	}
+
+	return tagRequeue.RowsAffected() + tagFail.RowsAffected(), nil
 }

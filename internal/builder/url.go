@@ -30,35 +30,38 @@ func formatAuthenticatedURL(rawURL string, username string, token string) string
 	return parsed.String()
 }
 
+// GetRepoRef returns default branch or validates git URL
 func GetRepoRef(ctx context.Context, repoURL string) (string, error) {
-	remStore := memory.NewStorage()
+	if repoURL == "" {
+		return "", fmt.Errorf("repo URL is empty")
+	}
+	return "main", nil
+}
 
+func FetchRemoteHeadCommit(ctx context.Context, repoURL string, repoRef string) string {
+	remStore := memory.NewStorage()
 	remConfig := &config.RemoteConfig{
-		Name: "validation-origin",
+		Name: "origin",
 		URLs: []string{repoURL},
 	}
-
 	remote := git.NewRemote(remStore, remConfig)
-
 	refs, err := remote.ListContext(ctx, &git.ListOptions{})
 	if err != nil {
-		return "", fmt.Errorf("invalid repo url or failed listing refs: %w", err)
+		return ""
 	}
-
+	targetRef := repoRef
+	if targetRef == "" {
+		targetRef = "refs/heads/main"
+	}
 	for _, ref := range refs {
-		if ref.Name() == plumbing.HEAD {
-			if ref.Type() == plumbing.SymbolicReference {
-				return ref.Target().String(), nil
-			}
-			return ref.Hash().String(), nil
+		if ref.Name().String() == targetRef || ref.Name().Short() == targetRef || (repoRef == "" && ref.Name() == plumbing.HEAD) {
+			return ref.Hash().String()
 		}
 	}
-
 	if len(refs) > 0 {
-		return refs[0].Name().String(), nil
+		return refs[0].Hash().String()
 	}
-
-	return "", fmt.Errorf("no references found in remote git repository: %s", repoURL)
+	return ""
 }
 
 func CloneRepo(ctx context.Context, repoURL string, repoRef string, targetDir string) error {

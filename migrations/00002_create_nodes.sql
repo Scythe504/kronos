@@ -1,7 +1,7 @@
 -- +goose Up
 CREATE TYPE node_status AS ENUM ('active', 'idle', 'dead', 'inactive');
 CREATE TABLE IF NOT EXISTS nodes (
-  id UUID PRIMARY KEY DEFAULT uuidv7(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   machine_id VARCHAR(64) NOT NULL,
   kernel VARCHAR(64) NOT NULL,
   architecture VARCHAR(64) NOT NULL,

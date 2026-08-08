@@ -67,7 +67,6 @@ func (p *Pipeline) Start(ctx context.Context) {
 
 		pollCount = 1
 		for _, task := range tasks {
-			task := task
 
 			if p.taskQueueDurationHist != nil && !task.CreatedAt.IsZero() {
 				queueDurationMs := time.Since(task.CreatedAt).Milliseconds()

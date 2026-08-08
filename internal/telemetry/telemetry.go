@@ -16,6 +16,7 @@ import (
 
 type TelemetryProvider interface {
 	GetServiceName() string
+	GetConfig() Config
 	LogInfo(ctx context.Context, msg string, args ...any)
 	LogErrorln(ctx context.Context, msg string, args ...any)
 	LogFatalln(ctx context.Context, msg string, args ...any)
@@ -88,6 +89,10 @@ func NewTelemetry(ctx context.Context, cfg Config) (*Telemetry, error) {
 
 func (t *Telemetry) GetServiceName() string {
 	return t.cfg.ServiceName
+}
+
+func (t *Telemetry) GetConfig() Config {
+	return t.cfg
 }
 
 func (t *Telemetry) LogInfo(ctx context.Context, msg string, args ...any) {

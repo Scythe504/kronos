@@ -35,6 +35,7 @@ type Service interface {
 	CreateWorkflowTemplate(ctx context.Context, wp WorkflowPayload) (uuid.UUID, error)
 	GetWorkflowTemplate(ctx context.Context, id string) (Workflow, error)
 	GetWorkflowTemplates(ctx context.Context, page, perPage int) ([]Workflow, error)
+	DeleteWorkflowTemplate(ctx context.Context, id string) (string, error)
 	CompleteWorkflowRun(ctx context.Context, workflowRunID uuid.UUID, workflowID uuid.UUID) (uuid.UUID, error)
 	TriggerWorkflow(ctx context.Context, workflowID uuid.UUID) (uuid.UUID, error)
 	TriggerDueCronWorkflows(ctx context.Context) ([]uuid.UUID, error)

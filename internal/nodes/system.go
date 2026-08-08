@@ -11,11 +11,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/scythe504/kronos/internal/database"
 	"github.com/scythe504/kronos/internal/utils"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/host"
 	"github.com/shirou/gopsutil/v4/mem"
-	"github.com/scythe504/kronos/internal/database"
 	"sync"
 )
 
@@ -68,7 +68,7 @@ func GetNodeConfig(ctx context.Context) *database.Node {
 type SystemInfo struct {
 	MachineID string
 	Kernel    string
-	Arch 			string
+	Arch      string
 	GPURamKB  int64
 	GPUModel  string
 	CPUModel  string
@@ -376,8 +376,8 @@ func queryLSPCI(filter string) (string, error) {
 		return "", err
 	}
 
-	lines := strings.Split(out.String(), "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(out.String(), "\n")
+	for line := range lines {
 		// Look for GPU class controllers
 		if strings.Contains(line, "VGA compatible controller") ||
 			strings.Contains(line, "3D controller") ||
@@ -421,8 +421,8 @@ func queryDarwinGPU(ctx context.Context) (string, int64, error) {
 			continue
 		}
 
-		if strings.HasPrefix(line, "Chipset Model:") {
-			model := strings.TrimSpace(strings.TrimPrefix(line, "Chipset Model:"))
+		if after, ok := strings.CutPrefix(line, "Chipset Model:"); ok {
+			model := strings.TrimSpace(after)
 			chipsetModels = append(chipsetModels, model)
 			if strings.HasPrefix(model, "Apple M") || strings.HasPrefix(model, "Apple A") {
 				isAppleSilicon = true

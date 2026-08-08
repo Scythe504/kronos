@@ -23,5 +23,5 @@ func AdaptTask(task database.Task) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return append(data, '\n'), nil
+	return data, nil
 }

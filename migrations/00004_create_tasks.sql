@@ -1,7 +1,7 @@
 -- +goose Up
 CREATE TYPE task_status AS ENUM ('failed', 'queued', 'running', 'completed', 'pending');
 CREATE TABLE IF NOT EXISTS tasks (
-  id UUID PRIMARY KEY DEFAULT uuidv7(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   workflow_run_id UUID REFERENCES workflow_runs(id) DEFAULT NULL,
   workflow_step_id UUID REFERENCES workflow_steps(id) DEFAULT NULL,
   workflow_id UUID REFERENCES workflows(id) DEFAULT NULL,
@@ -26,7 +26,7 @@ WHERE deleted_at IS NULL;
 CREATE INDEX index_retry_count ON tasks (retry_count);
 
 CREATE TABLE IF NOT EXISTS task_chains (
-  id UUID PRIMARY KEY DEFAULT uuidv7(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   trigger_task_id UUID NOT NULL REFERENCES tasks(id),
   follow_on_task_id UUID NOT NULL REFERENCES tasks(id),
   triggerer_payload JSONB NOT NULL DEFAULT '{}'::jsonb,

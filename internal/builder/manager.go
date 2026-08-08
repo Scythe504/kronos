@@ -37,11 +37,6 @@ func NewManager(cfg BuilderConfig, tel telemetry.TelemetryProvider) (*Manager, e
 	}, nil
 }
 
-// Config returns the active BuilderConfig.
-func (m *Manager) Config() BuilderConfig {
-	return m.config
-}
-
 // GetWorkspacePath generates a clean workspace directory path for a specific worker slug and cache key.
 func (m *Manager) GetWorkspacePath(slug string, cacheKey string) string {
 	return filepath.Join(m.config.RootDir, slug, cacheKey)
@@ -62,7 +57,7 @@ func (m *Manager) Build(ctx context.Context, worker database.Worker) (*BuildWork
 		return nil, fmt.Errorf("worker %s has empty repo_url", worker.Slug)
 	}
 
-	cacheKey := ComputeBuildCacheKey(worker)
+	cacheKey := ComputeBuildCacheKey(ctx, worker)
 	imageTag := fmt.Sprintf("kronos-worker:%s-%s", worker.Slug, cacheKey)
 
 	if m.IsImageCached(ctx, imageTag) {
@@ -73,6 +68,9 @@ func (m *Manager) Build(ctx context.Context, worker database.Worker) (*BuildWork
 			Cached:   true,
 		}, nil
 	}
+
+	// Invalidate & remove old image versions for this slug since cache key changed
+	m.PruneStaleImagesForSlug(ctx, worker.Slug, imageTag)
 
 	workspaceDir := m.GetWorkspacePath(worker.Slug, cacheKey)
 	if err := os.MkdirAll(workspaceDir, 0755); err != nil {
@@ -105,6 +103,25 @@ func (m *Manager) Build(ctx context.Context, worker database.Worker) (*BuildWork
 	}
 
 	return res, nil
+}
+
+// PruneStaleImagesForSlug removes older Docker images for a worker slug when a new version is compiled.
+func (m *Manager) PruneStaleImagesForSlug(ctx context.Context, slug string, currentImageTag string) {
+	cmd := exec.CommandContext(ctx, "docker", "images", "--format", "{{.Repository}}:{{.Tag}}", "--filter",
+		"reference=kronos-worker:"+slug+"-*")
+	out, err := cmd.Output()
+	if err != nil {
+		return
+	}
+	for line := range strings.FieldsSeq(string(out)) {
+		if line == currentImageTag {
+			continue
+		}
+		rmCmd := exec.CommandContext(ctx, "docker", "rmi", "-f", line)
+		if err := rmCmd.Run(); err == nil {
+			m.tel.LogInfo(ctx, "Invalidated old worker image cache", "image", line)
+		}
+	}
 }
 
 // PruneRemovedSlugs removes Docker images and workspace directories for any worker
@@ -144,7 +161,7 @@ func (m *Manager) PruneRemovedSlugs(ctx context.Context, allowedSlugs []string) 
 		if err != nil {
 			continue
 		}
-		for _, line := range strings.Fields(string(out)) {
+		for line := range strings.FieldsSeq(string(out)) {
 			rmCmd := exec.CommandContext(ctx, "docker", "rmi", "-f", line)
 			if err := rmCmd.Run(); err != nil {
 				m.tel.LogErrorln(ctx, "Failed to remove Docker image for removed slug", "image", line, "error", err)

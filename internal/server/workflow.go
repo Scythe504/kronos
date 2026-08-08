@@ -148,6 +148,27 @@ func (s *Server) triggerWorkflow(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) deleteWorkflowTemplate(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		utils.WriteError(w, http.StatusBadRequest, "Workflow ID parameter required")
+		return
+	}
+
+	deletedID, err := s.db.DeleteWorkflowTemplate(r.Context(), id)
+	if err != nil {
+		s.tel.LogErrorln(r.Context(), "Failed to delete workflow template", "id", id, "error", err)
+		utils.WriteError(w, http.StatusInternalServerError, "Failed to delete workflow template")
+		return
+	}
+
+	s.tel.LogInfo(r.Context(), "Workflow template deleted successfully", "id", deletedID)
+	utils.WriteJSON(w, http.StatusOK, workflowResponse{
+		Message: fmt.Sprintf("Workflow template '%s' deleted successfully", deletedID),
+		ID:      deletedID,
+	})
+}
+
 func (s *Server) createTaskchain(w http.ResponseWriter, r *http.Request) {
 	var steps []database.Step
 	if err := json.NewDecoder(r.Body).Decode(&steps); err != nil {

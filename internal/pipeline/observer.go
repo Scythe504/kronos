@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -18,7 +19,15 @@ func (p *Pipeline) ObserveProcessStdout(ctx context.Context, slug string) {
 	}
 	scanner := bufio.NewScanner(pipe.Stdout)
 	for scanner.Scan() {
-		go p.ResultHandler(ctx, json.RawMessage(scanner.Text()))
+		text := strings.TrimSpace(scanner.Text())
+		if text == "" {
+			continue
+		}
+		if strings.HasPrefix(text, "{") && strings.HasSuffix(text, "}") {
+			go p.ResultHandler(ctx, json.RawMessage(text))
+		} else {
+			p.tel.LogInfo(ctx, "Worker Stdout log", "slug", slug, "output", text)
+		}
 	}
 	if err := scanner.Err(); err != nil {
 		p.tel.LogErrorln(ctx, "Error scanning stdout", "slug", slug, "error", err.Error())
@@ -34,7 +43,7 @@ func (p *Pipeline) ObserveProcessStderr(ctx context.Context, slug string) {
 	}
 	scanner := bufio.NewScanner(pipe.Stderr)
 	for scanner.Scan() {
-		p.tel.LogErrorln(ctx, "Worker Stderr output", "slug", slug, "output", scanner.Text())
+		p.tel.LogInfo(ctx, "Worker Stderr output", "slug", slug, "output", scanner.Text())
 	}
 	if err := scanner.Err(); err != nil {
 		p.tel.LogErrorln(ctx, "Error scanning stderr", "slug", slug, "error", err.Error())

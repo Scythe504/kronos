@@ -19,15 +19,9 @@ func (s *Server) RegisterRoutes() http.Handler {
 	m.Get("/health", s.healthHandler)
 	m.Get("/setup.sh", s.installScriptHandler)
 	m.Get("/setup.ps1", s.installPS1Handler)
-	m.Get("/install.sh", s.installScriptHandler)
-	m.Get("/install.ps1", s.installPS1Handler)
 
 	// api/v1 routes
 	m.Route("/api/v1", func(r chi.Router) {
-		r.Get("/setup.sh", s.installScriptHandler)
-		r.Get("/setup.ps1", s.installPS1Handler)
-		r.Get("/install.sh", s.installScriptHandler)
-		r.Get("/install.ps1", s.installPS1Handler)
 		// Worker routes
 		r.Post("/workers", s.createWorker)
 		r.Get("/workers", s.getWorkers)
@@ -52,6 +46,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 		r.Post("/workflows/templates", s.createWorkflowTemplate)
 		r.Get("/workflows/templates", s.getWorkflowTemplates)
 		r.Get("/workflows/templates/{id}", s.getWorkflowTemplate)
+		r.Delete("/workflows/templates/{id}", s.deleteWorkflowTemplate)
 		r.Post("/workflows/{id}/trigger", s.triggerWorkflow)
 		r.Post("/workflows/task-chain", s.createTaskchain)
 		r.Post("/webhooks/{workflow_id}", s.triggerWorkflow)
@@ -59,6 +54,10 @@ func (s *Server) RegisterRoutes() http.Handler {
 		// SSE Log & Metrics Streaming
 		r.Get("/metrics/stream", s.streamLogs)
 		r.Get("/logs/stream", s.streamLogs)
+
+		// Secure Prometheus Read-Only Proxy
+		r.Get("/metrics/prometheus/query", s.queryPrometheusProxy)
+		r.Get("/metrics/prometheus/query_range", s.queryPrometheusRangeProxy)
 	})
 
 	return m

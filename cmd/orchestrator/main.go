@@ -60,7 +60,7 @@ func main() {
 	allowedSlugsStr := os.Getenv("ALLOWED_SLUGS")
 	var allowedSlugs []string
 	if allowedSlugsStr != "" {
-		for _, s := range strings.Split(allowedSlugsStr, ",") {
+		for s := range strings.SplitSeq(allowedSlugsStr, ",") {
 			if trimmed := strings.TrimSpace(s); trimmed != "" {
 				allowedSlugs = append(allowedSlugs, trimmed)
 			}

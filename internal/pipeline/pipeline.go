@@ -232,7 +232,18 @@ func (p *Pipeline) StartWorkerProcess(ctx context.Context, slug string) (*Pipe, 
 			return nil, fmt.Errorf("failed building container image for worker '%s': %w", slug, err)
 		}
 		p.tel.LogInfo(ctx, "Executing worker container process", "slug", slug, "image", buildRes.ImageTag, "cached", buildRes.Cached)
-		cmd = exec.CommandContext(ctx, "docker", "run", "--rm", "-i", buildRes.ImageTag)
+		
+		dockerArgs := []string{"run", "--rm", "-i", "-a", "stdin", "-a", "stdout", "-a", "stderr"}
+		if len(worker.EnvVars) > 0 {
+			var envMap map[string]string
+			if err := json.Unmarshal(worker.EnvVars, &envMap); err == nil {
+				for k, v := range envMap {
+					dockerArgs = append(dockerArgs, "-e", fmt.Sprintf("%s=%s", k, v))
+				}
+			}
+		}
+		dockerArgs = append(dockerArgs, buildRes.ImageTag)
+		cmd = exec.CommandContext(ctx, "docker", dockerArgs...)
 	} else {
 		cmd = exec.CommandContext(ctx, "go", "run", fmt.Sprintf("examples/%s/main.go", slug))
 	}

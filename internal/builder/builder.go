@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	packclient "github.com/buildpacks/pack/pkg/client"
 	"github.com/scythe504/kronos/internal/database"
 	"github.com/scythe504/kronos/internal/telemetry"
 )
@@ -25,23 +24,31 @@ type BuildWorkerResult struct {
 }
 
 // ComputeBuildCacheKey generates a deterministic SHA-256 hash representing a worker build configuration.
-func ComputeBuildCacheKey(worker database.Worker) string {
+func ComputeBuildCacheKey(ctx context.Context, worker database.Worker) string {
 	h := sha256.New()
 	h.Write([]byte(worker.RepoURL))
 	h.Write([]byte("|"))
 	h.Write([]byte(worker.RepoRef))
 	h.Write([]byte("|"))
-	if worker.PreBuildCommand != nil {
-		h.Write([]byte(*worker.PreBuildCommand))
+
+	// Query remote Git HEAD SHA to invalidate cache whenever new commits are pushed
+	user, token := resolveGitCredentials(worker.EnvVars)
+	authURL := formatAuthenticatedURL(worker.RepoURL, user, token)
+	remoteCommitSHA := FetchRemoteHeadCommit(ctx, authURL, worker.RepoRef)
+	if remoteCommitSHA != "" {
+		h.Write([]byte(remoteCommitSHA))
 	}
 	h.Write([]byte("|"))
-	if worker.BuildCommand != nil {
-		h.Write([]byte(*worker.BuildCommand))
+
+	if len(worker.EnvVars) > 0 {
+		h.Write(worker.EnvVars)
 	}
 	h.Write([]byte("|"))
-	if worker.RunCommand != nil {
-		h.Write([]byte(*worker.RunCommand))
+	if worker.DockerfilePath != nil {
+		h.Write([]byte(*worker.DockerfilePath))
 	}
+	h.Write([]byte("|"))
+	h.Write([]byte(worker.UpdatedAt.Format("2006-01-02T15:04:05.999999999Z07:00")))
 	hashBytes := h.Sum(nil)
 	return hex.EncodeToString(hashBytes)[:16]
 }
@@ -56,7 +63,7 @@ func resolveGitCredentials(envVars []byte) (string, string) {
 	var envMap map[string]string
 	if err := json.Unmarshal(envVars, &envMap); err != nil {
 		envStr := string(envVars)
-		for _, line := range strings.Split(envStr, "\n") {
+		for line := range strings.SplitSeq(envStr, "\n") {
 			parts := strings.SplitN(line, "=", 2)
 			if len(parts) == 2 {
 				k, v := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
@@ -82,7 +89,7 @@ func resolveGitCredentials(envVars []byte) (string, string) {
 	return "", ""
 }
 
-// executeContainerBuild compiles a container image using Dockerfile or Cloud-Native Buildpacks SDK.
+// executeContainerBuild compiles a container image using Dockerfile only.
 func executeContainerBuild(ctx context.Context, worker database.Worker, imageTag string, appPath string, tel telemetry.TelemetryProvider) (*BuildWorkerResult, error) {
 	dockerfilePath := ""
 	if worker.DockerfilePath != nil && *worker.DockerfilePath != "" {
@@ -91,56 +98,18 @@ func executeContainerBuild(ctx context.Context, worker database.Worker, imageTag
 		dockerfilePath = filepath.Join(appPath, "Dockerfile")
 	}
 
-	if dockerfilePath != "" {
-		tel.LogInfo(ctx, "Building worker with Dockerfile", "slug", worker.Slug, "dockerfile", dockerfilePath)
-		cmd := exec.CommandContext(ctx, "docker", "build", "-t", imageTag, "-f", dockerfilePath, appPath)
-		var outBuf, errBuf bytes.Buffer
-		cmd.Stdout = &outBuf
-		cmd.Stderr = &errBuf
+	if dockerfilePath == "" {
+		return nil, fmt.Errorf("no Dockerfile found at root or dockerfile_path for worker %s", worker.Slug)
+	}
 
-		if err := cmd.Run(); err != nil {
-			return nil, fmt.Errorf("docker build failed for %s: %w (stderr: %s)", worker.Slug, err, errBuf.String())
-		}
-	} else {
-		tel.LogInfo(ctx, "Building worker with Cloud-Native Buildpacks Go SDK", "slug", worker.Slug, "image", imageTag)
+	tel.LogInfo(ctx, "Building worker with Dockerfile", "slug", worker.Slug, "dockerfile", dockerfilePath)
+	cmd := exec.CommandContext(ctx, "docker", "build", "-t", imageTag, "-f", dockerfilePath, appPath)
+	var outBuf, errBuf bytes.Buffer
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &errBuf
 
-		pClient, err := packclient.NewClient()
-		if err != nil {
-			return nil, fmt.Errorf("failed initializing pack SDK client: %w", err)
-		}
-
-		envMap := make(map[string]string)
-		if len(worker.EnvVars) > 0 {
-			envMap["KRONOS_WORKER_ENV"] = string(worker.EnvVars)
-		}
-		if worker.PreBuildCommand != nil && *worker.PreBuildCommand != "" {
-			envMap["BP_PRE_BUILD_COMMAND"] = *worker.PreBuildCommand
-		}
-		if worker.BuildCommand != nil && *worker.BuildCommand != "" {
-			envMap["BP_BUILD_COMMAND"] = *worker.BuildCommand
-		}
-		if worker.RunCommand != nil && *worker.RunCommand != "" {
-			envMap["BP_RUN_COMMAND"] = *worker.RunCommand
-		}
-
-		defaultProcess := ""
-		if worker.RunCommand != nil && *worker.RunCommand != "" {
-			defaultProcess = *worker.RunCommand
-		} else if worker.Entrypoint != "" {
-			defaultProcess = worker.Entrypoint
-		}
-
-		buildOpts := packclient.BuildOptions{
-			Image:              imageTag,
-			AppPath:            appPath,
-			Builder:            "paketobuildpacks/builder:base",
-			Env:                envMap,
-			DefaultProcessType: defaultProcess,
-		}
-
-		if err := pClient.Build(ctx, buildOpts); err != nil {
-			return nil, fmt.Errorf("pack SDK build failed for %s: %w", worker.Slug, err)
-		}
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("docker build failed for %s: %w (stderr: %s)", worker.Slug, err, errBuf.String())
 	}
 
 	tel.LogInfo(ctx, "Worker build completed successfully", "slug", worker.Slug, "image", imageTag)
@@ -152,11 +121,3 @@ func executeContainerBuild(ctx context.Context, worker database.Worker, imageTag
 	}, nil
 }
 
-// BuildWorker is a convenience function that delegates build operations to a default Manager.
-func BuildWorker(ctx context.Context, worker database.Worker, tel telemetry.TelemetryProvider) (*BuildWorkerResult, error) {
-	mgr, err := NewManager(NewDefaultConfig(), tel)
-	if err != nil {
-		return nil, err
-	}
-	return mgr.Build(ctx, worker)
-}

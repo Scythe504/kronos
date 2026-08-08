@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
 // EncryptEnv encrypts plaintext using AES-256-GCM, returning a base64-encoded ciphertext.
@@ -33,7 +34,7 @@ func EncryptEnv(plaintext string, key []byte) (string, error) {
 	return base64.StdEncoding.EncodeToString(cipherText), nil
 }
 
-// DecryptEnv decrypts a base64-encoded AES-256-GCM ciphertext, returning the original plaintext.
+// DecryptEnv decrypts a base64-encoded AES-256-GCM ciphertext, returning the original plaintext string.
 func DecryptEnv(cryptoText string, key []byte) (string, error) {
 	cipherText, err := base64.StdEncoding.DecodeString(cryptoText)
 	if err != nil {
@@ -60,7 +61,18 @@ func DecryptEnv(cryptoText string, key []byte) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to decrypt to plaintext: %w", err)
 	}
-	return string(plaintext), nil
+
+	decryptedStr := string(plaintext)
+	// If decrypted string is valid key=val or json object, return directly
+	if strings.Contains(decryptedStr, "=") || strings.HasPrefix(decryptedStr, "{") {
+		return decryptedStr, nil
+	}
+	// If decrypted string is itself base64-encoded (from double encoding), decode it once more
+	if decoded, b64Err := base64.StdEncoding.DecodeString(decryptedStr); b64Err == nil && len(decoded) > 0 {
+		return string(decoded), nil
+	}
+
+	return decryptedStr, nil
 }
 
 // GetEncryptionKey derives a 32-byte AES-256 key from the SECRET_KEY environment variable

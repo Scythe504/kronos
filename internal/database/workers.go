@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"strings"
 
@@ -73,6 +74,7 @@ func (s *service) UpsertWorker(ctx context.Context, tx pgx.Tx, workers []Worker)
 		    entrypoint = EXCLUDED.entrypoint,
 		    task_unit = EXCLUDED.task_unit,
 		    task_timeout_seconds = EXCLUDED.task_timeout_seconds,
+		    deleted_at = NULL,
 		    updated_at = NOW()
 		RETURNING slug
 	`, strings.Join(valueStrings, ", "))
@@ -119,7 +121,7 @@ func (s *service) GetWorker(ctx context.Context, slug string) (Worker, error) {
 		WHERE slug = $1 AND deleted_at IS NULL
 	`
 	var w Worker
-	var encryptedEnv *string
+	var encryptedEnv []byte
 	err := s.pool.QueryRow(ctx, query, slug).Scan(
 		&w.Slug, &w.Name, &w.Description, &w.RepoURL, &w.RepoRef,
 		&encryptedEnv, &w.PreBuildCommand, &w.BuildCommand, &w.RunCommand, &w.DockerfilePath, &w.Entrypoint,
@@ -128,10 +130,12 @@ func (s *service) GetWorker(ctx context.Context, slug string) (Worker, error) {
 	if err != nil {
 		return w, err
 	}
-	if encryptedEnv != nil && *encryptedEnv != "" {
-		dec, err := utils.DecryptEnv(*encryptedEnv, encKey)
+	if len(encryptedEnv) > 0 {
+		dec, err := utils.DecryptEnv(string(encryptedEnv), encKey)
 		if err == nil {
 			w.EnvVars = []byte(dec)
+		} else {
+			w.EnvVars = encryptedEnv
 		}
 	}
 	return w, nil
@@ -163,7 +167,7 @@ func (s *service) GetWorkers(ctx context.Context, page int, perPage int) ([]Work
 	var workers []Worker
 	for rows.Next() {
 		var w Worker
-		var encryptedEnv *string
+		var encryptedEnv []byte
 		if err := rows.Scan(
 			&w.Slug, &w.Name, &w.Description, &w.RepoURL, &w.RepoRef,
 			&encryptedEnv, &w.PreBuildCommand, &w.BuildCommand, &w.RunCommand, &w.DockerfilePath, &w.Entrypoint,
@@ -171,8 +175,14 @@ func (s *service) GetWorkers(ctx context.Context, page int, perPage int) ([]Work
 		); err != nil {
 			return nil, err
 		}
-		if encryptedEnv != nil && *encryptedEnv != "" {
-			if dec, err := utils.DecryptEnv(*encryptedEnv, encKey); err == nil {
+		if len(encryptedEnv) > 0 {
+			dec, err := utils.DecryptEnv(string(encryptedEnv), encKey)
+			if err != nil {
+				dec = string(encryptedEnv)
+			}
+			if decoded, b64Err := base64.StdEncoding.DecodeString(dec); b64Err == nil && len(decoded) > 0 {
+				w.EnvVars = decoded
+			} else {
 				w.EnvVars = []byte(dec)
 			}
 		}

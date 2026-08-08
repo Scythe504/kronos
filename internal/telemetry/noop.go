@@ -21,6 +21,10 @@ func (n *NoopTelemetry) GetServiceName() string {
 	return n.cfg.ServiceName
 }
 
+func (n *NoopTelemetry) GetConfig() Config {
+	return n.cfg
+}
+
 func (n *NoopTelemetry) LogInfo(ctx context.Context, msg string, args ...any)       {}
 func (n *NoopTelemetry) LogErrorln(ctx context.Context, msg string, args ...any)    {}
 func (n *NoopTelemetry) LogFatalln(ctx context.Context, msg string, args ...any)    {}

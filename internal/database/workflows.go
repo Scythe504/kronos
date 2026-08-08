@@ -29,11 +29,42 @@ type Step struct {
 }
 
 func (s *service) CreateWorkflowTemplate(ctx context.Context, wp WorkflowPayload) (uuid.UUID, error) {
+	var nextRun *time.Time
+	triggerConfigStr := wp.TriggerConfig
+	if wp.TriggerType == string(TriggerTypeCron) && wp.TriggerConfig != "" {
+		expr := wp.TriggerConfig
+		var cfg struct {
+			CronExpression string `json:"cron_expression"`
+			Cron           string `json:"cron"`
+			Expression     string `json:"expression"`
+		}
+		if err := json.Unmarshal([]byte(wp.TriggerConfig), &cfg); err == nil {
+			if cfg.CronExpression != "" {
+				expr = cfg.CronExpression
+			} else if cfg.Cron != "" {
+				expr = cfg.Cron
+			} else if cfg.Expression != "" {
+				expr = cfg.Expression
+			}
+		} else {
+			// Raw cron expression string sent from frontend (e.g. "*/30 * * * *")
+			triggerConfigStr = fmt.Sprintf(`{"cron_expression":%q}`, expr)
+		}
+
+		if expr != "" {
+			if sched, err := cron.ParseStandard(expr); err == nil {
+				t := sched.Next(time.Now())
+				nextRun = &t
+			}
+		}
+	}
+
 	queryInsertWorkflow := `INSERT INTO workflows (
 		name,
 		trigger_type,
-		trigger_config
-	) VALUES ($1, $2, $3)
+		trigger_config,
+		next_run_at
+	) VALUES ($1, $2, $3, $4)
 		RETURNING id
 	`
 
@@ -65,7 +96,7 @@ func (s *service) CreateWorkflowTemplate(ctx context.Context, wp WorkflowPayload
 	}
 
 	var workflowRetId uuid.UUID
-	row := tx.QueryRow(ctx, queryInsertWorkflow, wp.Name, wp.TriggerType, wp.TriggerConfig)
+	row := tx.QueryRow(ctx, queryInsertWorkflow, wp.Name, wp.TriggerType, triggerConfigStr, nextRun)
 	if err := row.Scan(&workflowRetId); err != nil {
 		return uuid.Nil, err
 	}
@@ -317,7 +348,7 @@ func (s *service) GetWorkflowTemplate(ctx context.Context, id string) (Workflow,
 	if err != nil {
 		return Workflow{}, err
 	}
-	query := `SELECT id, name, description, trigger_type, trigger_config, is_active, created_at, updated_at, deleted_at FROM workflows WHERE id = $1 AND deleted_at IS NULL`
+	query := `SELECT id, name, trigger_type, trigger_config, next_run_at, created_at, updated_at, deleted_at FROM workflows WHERE id = $1 AND deleted_at IS NULL`
 	rows, err := s.pool.Query(ctx, query, workflowUUID)
 	if err != nil {
 		return Workflow{}, err
@@ -335,7 +366,7 @@ func (s *service) GetWorkflowTemplates(ctx context.Context, page, perPage int) (
 	}
 	offset := (page - 1) * perPage
 
-	query := `SELECT id, name, description, trigger_type, trigger_config, is_active, created_at, updated_at, deleted_at FROM workflows WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT $1 OFFSET $2`
+	query := `SELECT id, name, trigger_type, trigger_config, next_run_at, created_at, updated_at, deleted_at FROM workflows WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT $1 OFFSET $2`
 	rows, err := s.pool.Query(ctx, query, perPage, offset)
 	if err != nil {
 		return nil, err
@@ -343,4 +374,18 @@ func (s *service) GetWorkflowTemplates(ctx context.Context, page, perPage int) (
 	defer rows.Close()
 
 	return pgx.CollectRows(rows, pgx.RowToStructByName[Workflow])
+}
+
+func (s *service) DeleteWorkflowTemplate(ctx context.Context, id string) (string, error) {
+	workflowUUID, err := uuid.Parse(id)
+	if err != nil {
+		return "", err
+	}
+	query := `UPDATE workflows SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL RETURNING id`
+	var deletedID uuid.UUID
+	err = s.pool.QueryRow(ctx, query, workflowUUID).Scan(&deletedID)
+	if err != nil {
+		return "", err
+	}
+	return deletedID.String(), nil
 }

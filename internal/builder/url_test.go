@@ -61,22 +61,19 @@ func createLocalTestGitRepo(t *testing.T) (string, func()) {
 	}
 }
 
-func TestGetRepoRef(t *testing.T) {
+func TestFetchRemoteHeadCommit(t *testing.T) {
 	ctx := t.Context()
 
-	ref, err := GetRepoRef(ctx, testGitUrl)
-	if err != nil {
-		t.Fatalf("GetRepoRef error = %v", err)
-	}
-	if ref == "" {
-		t.Fatalf("expected non-empty repo ref")
+	commitSHA := FetchRemoteHeadCommit(ctx, testGitUrl, "main")
+	if commitSHA == "" {
+		t.Fatalf("expected non-empty commit SHA")
 	}
 }
 
-func TestGetRepoRef_InvalidURL(t *testing.T) {
-	_, err := GetRepoRef(t.Context(), "https://invalid-domain.example.com/repo.git")
-	if err == nil {
-		t.Fatalf("expected error for invalid git repo URL, got nil")
+func TestFetchRemoteHeadCommit_InvalidURL(t *testing.T) {
+	sha := FetchRemoteHeadCommit(t.Context(), "https://invalid-domain.example.com/repo.git", "main")
+	if sha != "" {
+		t.Fatalf("expected empty SHA for invalid git repo URL")
 	}
 }
 
