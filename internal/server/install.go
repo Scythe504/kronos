@@ -13,6 +13,13 @@ var setupScriptTemplate string
 //go:embed templates/setup.ps1
 var setupPS1Template string
 
+const defaultAgentVersion = "v0.1.0"
+
+type installScriptData struct {
+	MasterURL string
+	Version   string
+}
+
 func (s *Server) installScriptHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 
@@ -29,10 +36,9 @@ func (s *Server) installScriptHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = tmpl.Execute(w, struct {
-		MasterURL string
-	}{
+	_ = tmpl.Execute(w, installScriptData{
 		MasterURL: masterURL,
+		Version:   defaultAgentVersion,
 	})
 }
 
@@ -52,9 +58,9 @@ func (s *Server) installPS1Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = tmpl.Execute(w, struct {
-		MasterURL string
-	}{
+	_ = tmpl.Execute(w, installScriptData{
 		MasterURL: masterURL,
+		Version:   defaultAgentVersion,
 	})
 }
+
