@@ -16,9 +16,7 @@ before:
     - go generate ./...
 
 builds:
-  - id: kronos-daemon-binary
-  - binary: kronos
-  - main: ./cmd/orchestrator/main.go
+  - main: ./...
     env:
       - CGO_ENABLED=0
     goos:
