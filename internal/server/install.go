@@ -13,11 +13,15 @@ var setupScriptTemplate string
 //go:embed templates/setup.ps1
 var setupPS1Template string
 
-const defaultAgentVersion = "v0.1.0"
+const (
+	defaultAgentVersion = "v0.1.0"
+	defaultDocsURL      = "https://docs-kronos.vercel.app"
+)
 
 type installScriptData struct {
 	MasterURL string
 	Version   string
+	DocsURL   string
 }
 
 func (s *Server) installScriptHandler(w http.ResponseWriter, r *http.Request) {
@@ -39,6 +43,7 @@ func (s *Server) installScriptHandler(w http.ResponseWriter, r *http.Request) {
 	_ = tmpl.Execute(w, installScriptData{
 		MasterURL: masterURL,
 		Version:   defaultAgentVersion,
+		DocsURL:   defaultDocsURL,
 	})
 }
 
@@ -61,6 +66,7 @@ func (s *Server) installPS1Handler(w http.ResponseWriter, r *http.Request) {
 	_ = tmpl.Execute(w, installScriptData{
 		MasterURL: masterURL,
 		Version:   defaultAgentVersion,
+		DocsURL:   defaultDocsURL,
 	})
 }
 

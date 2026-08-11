@@ -2,7 +2,7 @@
 set -e
 
 # ==========================================
-# 1. Top-Level Variable Initialization
+# Top-Level Configuration Variables
 # ==========================================
 VERSION="${KRONOS_VERSION:-{{ .Version }}}"
 if [ "$VERSION" = "{{ .Version }}" ] || [ -z "$VERSION" ]; then
@@ -16,11 +16,16 @@ if [ "$DEFAULT_MASTER_URL" = "{{ .MasterURL }}" ] || [ -z "$DEFAULT_MASTER_URL" 
   DEFAULT_MASTER_URL="http://localhost:8080"
 fi
 
+DOCS_URL="${KRONOS_DOCS_URL:-{{ .DocsURL }}}"
+if [ "$DOCS_URL" = "{{ .DocsURL }}" ] || [ -z "$DOCS_URL" ]; then
+  DOCS_URL="https://docs-kronos.vercel.app"
+fi
+
 MASTER_URL="${KRONOS_MASTER_URL:-$DEFAULT_MASTER_URL}"
 ALLOWED_SLUGS="${KRONOS_ALLOWED_SLUGS:-}"
 TASK_UNIT="${KRONOS_TASK_UNIT:-cpu}"
 
-# Directories & File Paths
+# Directories & Configuration File Path
 if [ "$(id -u)" -eq 0 ]; then
   CONFIG_DIR="/etc/kronos"
   BIN_DIR="/usr/local/bin"
@@ -30,9 +35,8 @@ else
 fi
 
 CONF_FILE="$CONFIG_DIR/agent.conf"
-SERVICE_FILE="/etc/systemd/system/kronos.service"
 
-# UI / Terminal Formatting
+# Terminal Formatting Colors
 BOLD="\033[1m"
 GREEN="\033[32m"
 CYAN="\033[36m"
@@ -42,17 +46,17 @@ RESET="\033[0m"
 
 echo -e "${BOLD}${CYAN}=== Kronos Node Agent Setup (${VERSION}) ===${RESET}\n"
 
-# Interactive prompt for Master URL if running interactively and not specified in environment
+# Interactive prompt if running interactively without environment variable
 if [ -z "$KRONOS_MASTER_URL" ] && [ -t 0 ]; then
   read -r -p "Enter Master Server URL [default: $DEFAULT_MASTER_URL]: " INPUT_URL
   MASTER_URL="${INPUT_URL:-$DEFAULT_MASTER_URL}"
 fi
 
 echo -e "${GREEN}Configured Master URL: $MASTER_URL${RESET}"
-echo -e "${GREEN}Configured Task Unit: $TASK_UNIT${RESET}\n"
+echo -e "${GREEN}Configured Task Unit:  $TASK_UNIT${RESET}\n"
 
 # ==========================================
-# 2. Detect Operating System & Architecture
+# Architecture & OS Detection
 # ==========================================
 OS_RAW="$(uname -s)"
 case "$OS_RAW" in
@@ -70,10 +74,9 @@ case "$ARCH_RAW" in
   *) echo -e "${RED}Unsupported Architecture: $ARCH_RAW${RESET}"; exit 1 ;;
 esac
 
+EXT="tar.gz"
 if [ "$OS" = "Windows" ]; then
   EXT="zip"
-else
-  EXT="tar.gz"
 fi
 
 ARCHIVE_NAME="kronos_${OS}_${ARCH}.${EXT}"
@@ -84,7 +87,7 @@ CHECKSUMS_NAME="kronos_${VERSION_NO_V}_checksums.txt"
 CHECKSUMS_URL="https://github.com/${REPO}/releases/download/${VERSION}/${CHECKSUMS_NAME}"
 
 # ==========================================
-# 3. Create Directories & Download Assets
+# Download & Extraction
 # ==========================================
 mkdir -p "$CONFIG_DIR" "$BIN_DIR"
 
@@ -105,15 +108,13 @@ else
   exit 1
 fi
 
-# ==========================================
-# 4. Verify Checksum & Extract Binary
-# ==========================================
+# Live SHA256 Checksum Verification
 if [ -f "$TMP_DIR/$CHECKSUMS_NAME" ]; then
   echo -e "${CYAN}Verifying SHA256 checksum...${RESET}"
   if command -v sha256sum >/dev/null 2>&1; then
-    (cd "$TMP_DIR" && grep "$ARCHIVE_NAME" "$CHECKSUMS_NAME" | sha256sum -c -) || echo -e "${YELLOW}Warning: Checksum verification warning.${RESET}"
+    (cd "$TMP_DIR" && grep "$ARCHIVE_NAME" "$CHECKSUMS_NAME" | sha256sum -c -)
   elif command -v shasum >/dev/null 2>&1; then
-    (cd "$TMP_DIR" && grep "$ARCHIVE_NAME" "$CHECKSUMS_NAME" | shasum -a 256 -c -) || echo -e "${YELLOW}Warning: Checksum verification warning.${RESET}"
+    (cd "$TMP_DIR" && grep "$ARCHIVE_NAME" "$CHECKSUMS_NAME" | shasum -a 256 -c -)
   fi
 fi
 
@@ -139,7 +140,7 @@ chmod +x "$BIN_DIR/$BIN_NAME"
 echo -e "${GREEN}Binary installed to $BIN_DIR/$BIN_NAME${RESET}"
 
 # ==========================================
-# 5. Save Configuration to agent.conf
+# Configuration File Generation
 # ==========================================
 cat << EOF > "$CONF_FILE"
 # Kronos Node Agent Configuration
@@ -151,29 +152,22 @@ EOF
 echo -e "${GREEN}Configuration saved to $CONF_FILE${RESET}"
 
 # ==========================================
-# 6. Systemd Installation (Linux Root)
+# Execution Instructions & Documentation
 # ==========================================
-if [ "$OS" = "Linux" ] && [ "$(id -u)" -eq 0 ] && command -v systemctl >/dev/null 2>&1; then
-  cat << EOF > "$SERVICE_FILE"
-[Unit]
-Description=Kronos Worker Node Agent Daemon
-After=network.target
-
-[Service]
-Type=simple
-EnvironmentFile=$CONF_FILE
-ExecStart=$BIN_DIR/kronos
-Restart=always
-RestartSec=5s
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-  systemctl daemon-reload
-  echo -e "${GREEN}Systemd service installed at $SERVICE_FILE${RESET}"
-  echo -e "To start the agent: ${BOLD}systemctl enable --now kronos${RESET}"
+echo -e "\n${BOLD}${CYAN}Daemon Execution Commands:${RESET}"
+if [ "$OS" = "Linux" ] && command -v systemctl >/dev/null 2>&1; then
+  if [ "$(id -u)" -eq 0 ]; then
+    echo -e "  Start systemd daemon:    ${BOLD}systemctl enable --now kronos${RESET}"
+  else
+    echo -e "  Start user daemon:       ${BOLD}systemctl --user enable --now kronos${RESET}"
+  fi
+else
+  echo -e "  Run as background daemon: ${BOLD}nohup $BIN_DIR/kronos > /tmp/kronos.log 2>&1 &${RESET}"
+  echo -e "  Run directly:            ${BOLD}$BIN_DIR/kronos${RESET}"
 fi
+
+echo -e "\n${CYAN}For documentation & setup guides, visit:${RESET}"
+echo -e "${BOLD}${DOCS_URL}${RESET}"
 
 echo -e "\n${BOLD}${GREEN}=== Node Setup Completed Successfully! ===${RESET}"
 

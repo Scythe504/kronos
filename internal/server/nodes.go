@@ -14,6 +14,7 @@ import (
 )
 
 type nodeInitRequest struct {
+	ID           string   `json:"id,omitempty"`
 	NodeID       string   `json:"node_id,omitempty"`
 	MachineID    string   `json:"machine_id"`
 	Secret       string   `json:"secret"`
@@ -71,8 +72,12 @@ func (s *Server) initNode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var parsedUUID *uuid.UUID
-	if reqBody.NodeID != "" {
-		if u, err := uuid.Parse(reqBody.NodeID); err == nil && u != uuid.Nil {
+	idStr := reqBody.ID
+	if idStr == "" {
+		idStr = reqBody.NodeID
+	}
+	if idStr != "" {
+		if u, err := uuid.Parse(idStr); err == nil && u != uuid.Nil {
 			parsedUUID = &u
 		}
 	}

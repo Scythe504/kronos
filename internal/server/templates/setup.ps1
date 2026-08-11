@@ -120,5 +120,16 @@ TASK_UNIT=$TaskUnit
 Set-Content -Path $ConfFile -Value $ConfContent -Encoding UTF8
 Write-Host "`nConfiguration saved to $ConfFile" -ForegroundColor Green
 
-Write-Host "=== Setup Completed Successfully! ===" -ForegroundColor Green
+# ==========================================
+# 6. Daemon Execution & Documentation Info
+# ==========================================
+Write-Host "`n=== Daemon Execution Commands ===" -ForegroundColor Cyan
+Write-Host "  Run as Windows Service (Admin): sc.exe create Kronos binPath= `"$BinaryPath`" start= auto"
+Write-Host "  Start Windows Service:          sc.exe start Kronos"
+Write-Host "  Run in background (PowerShell): Start-Process -FilePath `"$BinaryPath`" -WindowStyle Hidden"
+Write-Host "  Run directly:                   kronos"
 
+Write-Host "`nFor detailed documentation, daemon setup guides, and node cluster docs, visit:" -ForegroundColor Cyan
+Write-Host "$DocsURL" -ForegroundColor Yellow
+
+Write-Host "`n=== Setup Completed Successfully! ===" -ForegroundColor Green
