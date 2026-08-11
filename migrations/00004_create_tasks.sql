@@ -2,9 +2,9 @@
 CREATE TYPE task_status AS ENUM ('failed', 'queued', 'running', 'completed', 'pending');
 CREATE TABLE IF NOT EXISTS tasks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  workflow_run_id UUID REFERENCES workflow_runs(id) DEFAULT NULL,
-  workflow_step_id UUID REFERENCES workflow_steps(id) DEFAULT NULL,
-  workflow_id UUID REFERENCES workflows(id) DEFAULT NULL,
+  workflow_run_id UUID REFERENCES workflow_runs(id) ON DELETE SET NULL DEFAULT NULL,
+  workflow_step_id UUID REFERENCES workflow_steps(id) ON DELETE SET NULL DEFAULT NULL,
+  workflow_id UUID REFERENCES workflows(id) ON DELETE SET NULL DEFAULT NULL,
   payload_slug VARCHAR(255) NOT NULL, -- REFERENCES workers(slug),
   payload JSONB NOT NULL DEFAULT '{}'::jsonb,
   retry_count INT DEFAULT 0,

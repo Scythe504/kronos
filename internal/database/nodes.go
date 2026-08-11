@@ -27,10 +27,11 @@ func (s *service) RegisterNode(ctx context.Context, n Node) (string, error) {
 			ip_addr,
 			hostname,
 			task_unit,
+			allowed_slugs,
 			node_version
 		)
 		VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
 		)
 		ON CONFLICT (id) DO UPDATE SET
 			kernel = EXCLUDED.kernel,
@@ -43,6 +44,7 @@ func (s *service) RegisterNode(ctx context.Context, n Node) (string, error) {
 			ip_addr = EXCLUDED.ip_addr,
 			hostname = EXCLUDED.hostname,
 			task_unit = EXCLUDED.task_unit,
+			allowed_slugs = EXCLUDED.allowed_slugs,
 			node_version = EXCLUDED.node_version,
 			updated_at = now()
 		WHERE nodes.status != 'inactive'::node_status
@@ -52,7 +54,7 @@ func (s *service) RegisterNode(ctx context.Context, n Node) (string, error) {
 			n.ID, n.MachineID, n.Kernel, n.Architecture,
 			n.GPURamKB, n.GPUModel, n.CPUModel, n.CPUCores,
 			n.RAMKB, n.IPAddr, n.Hostname, n.TaskUnit,
-			n.NodeVersion,
+			n.AllowedSlugs, n.NodeVersion,
 		}
 	} else {
 		query = `INSERT INTO nodes (
@@ -67,10 +69,11 @@ func (s *service) RegisterNode(ctx context.Context, n Node) (string, error) {
 			ip_addr,
 			hostname,
 			task_unit,
+			allowed_slugs,
 			node_version
 		)
 		VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
 		)
 		RETURNING id
 		`
@@ -78,7 +81,7 @@ func (s *service) RegisterNode(ctx context.Context, n Node) (string, error) {
 			n.MachineID, n.Kernel, n.Architecture,
 			n.GPURamKB, n.GPUModel, n.CPUModel, n.CPUCores,
 			n.RAMKB, n.IPAddr, n.Hostname, n.TaskUnit,
-			n.NodeVersion,
+			n.AllowedSlugs, n.NodeVersion,
 		}
 	}
 
@@ -137,6 +140,7 @@ func (s *service) GetNode(ctx context.Context, nodeID string) (Node, error) {
 		cloud_region,
 		cloud_platform,
 		task_unit,
+		allowed_slugs,
 		status,
 		node_version,
 		last_heartbeat_at,
@@ -178,6 +182,7 @@ func (s *service) GetNodes(ctx context.Context, page int, perPage int) ([]Node, 
 		cloud_region,
 		cloud_platform,
 		task_unit,
+		allowed_slugs,
 		status,
 		node_version,
 		last_heartbeat_at,
@@ -228,4 +233,18 @@ func (s *service) ReapDeadNodes(ctx context.Context, threshold time.Duration) (i
 		return 0, err
 	}
 	return tag.RowsAffected(), nil
+}
+
+func (s *service) UpdateNode(ctx context.Context, nodeID string, taskUnit TaskUnit, allowedSlugs []string) error {
+	nodeUUID, err := uuid.Parse(nodeID)
+	if err != nil {
+		return err
+	}
+
+	query := `UPDATE nodes
+		SET task_unit = $1, allowed_slugs = $2, updated_at = now()
+		WHERE id = $3 AND nodes.status != 'inactive'::node_status
+	`
+	_, err = s.pool.Exec(ctx, query, taskUnit, allowedSlugs, nodeUUID)
+	return err
 }

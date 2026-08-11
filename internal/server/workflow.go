@@ -77,6 +77,51 @@ func (s *Server) createWorkflowTemplate(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+func (s *Server) updateWorkflowTemplate(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	if idStr == "" {
+		utils.WriteError(w, http.StatusBadRequest, "Workflow ID is required")
+		return
+	}
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		utils.WriteError(w, http.StatusBadRequest, "Invalid workflow ID format")
+		return
+	}
+
+	var payload database.WorkflowPayload
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		s.tel.LogInfo(r.Context(), "Failed to decode workflow template update payload", "path", r.URL.Path, "httpCode", http.StatusBadRequest, "error", err)
+		utils.WriteError(w, http.StatusBadRequest, "Invalid Request Body")
+		return
+	}
+	defer r.Body.Close()
+
+	if payload.Name == "" {
+		utils.WriteError(w, http.StatusBadRequest, "Workflow name/slug is required")
+		return
+	}
+
+	if err := validateSequentialSteps(payload.Steps); err != nil {
+		s.tel.LogInfo(r.Context(), "Invalid workflow steps sequence for update", "name", payload.Name, "error", err)
+		utils.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	err = s.db.UpdateWorkflowTemplate(r.Context(), id, payload)
+	if err != nil {
+		s.tel.LogErrorln(r.Context(), "Failed to update workflow template", "id", idStr, "error", err)
+		utils.WriteError(w, http.StatusInternalServerError, "Failed to update workflow template")
+		return
+	}
+
+	s.tel.LogInfo(r.Context(), "Workflow template updated successfully", "workflow_id", idStr, "name", payload.Name)
+	utils.WriteJSON(w, http.StatusOK, workflowResponse{
+		Message: fmt.Sprintf("Workflow template '%s' updated successfully", payload.Name),
+		ID:      idStr,
+	})
+}
+
 func (s *Server) getWorkflowTemplates(w http.ResponseWriter, r *http.Request) {
 	pageStr := r.URL.Query().Get("page")
 	perPageStr := r.URL.Query().Get("per_page")

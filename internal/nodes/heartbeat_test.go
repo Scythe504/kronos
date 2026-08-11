@@ -25,6 +25,13 @@ func (m *mockDB) GetWorkers(ctx context.Context, page int, perPage int) ([]datab
 	return nil, nil
 }
 
+func (m *mockDB) GetNode(ctx context.Context, nodeID string) (database.Node, error) {
+	return database.Node{
+		TaskUnit: database.TaskUnitCPU,
+		Status:   database.NodeStatusActive,
+	}, nil
+}
+
 func TestSendHeartbeat(t *testing.T) {
 	ctx := t.Context()
 	timerCtx, cancel := context.WithTimeout(ctx, 35*time.Second)
@@ -39,7 +46,10 @@ func TestSendHeartbeat(t *testing.T) {
 		},
 	}
 
-	go SendHeartbeat(mock, timerCtx, "dummy-m-id", database.TaskUnitCPU, nil)
+	nodeCfg := &database.Node{
+		TaskUnit: database.TaskUnitCPU,
+	}
+	go SendHeartbeat(mock, timerCtx, "dummy-m-id", nodeCfg, nil)
 	<-timerCtx.Done()
 
 	count := atomic.LoadInt32(&heartbeatCount)

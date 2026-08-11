@@ -354,7 +354,24 @@ func (s *service) GetWorkflowTemplate(ctx context.Context, id string) (Workflow,
 		return Workflow{}, err
 	}
 	defer rows.Close()
-	return pgx.CollectOneRow(rows, pgx.RowToStructByName[Workflow])
+	wf, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[Workflow])
+	if err != nil {
+		return Workflow{}, err
+	}
+
+	stepsQuery := `SELECT id, workflow_id, slug, condition, step_order, payload FROM workflow_steps WHERE workflow_id = $1 ORDER BY step_order ASC`
+	stepRows, err := s.pool.Query(ctx, stepsQuery, workflowUUID)
+	if err != nil {
+		return Workflow{}, err
+	}
+	defer stepRows.Close()
+
+	steps, err := pgx.CollectRows(stepRows, pgx.RowToStructByName[WorkflowStep])
+	if err != nil {
+		return Workflow{}, err
+	}
+	wf.Steps = steps
+	return wf, nil
 }
 
 func (s *service) GetWorkflowTemplates(ctx context.Context, page, perPage int) ([]Workflow, error) {
@@ -388,4 +405,101 @@ func (s *service) DeleteWorkflowTemplate(ctx context.Context, id string) (string
 		return "", err
 	}
 	return deletedID.String(), nil
+}
+
+func (s *service) UpdateWorkflowTemplate(ctx context.Context, id uuid.UUID, wp WorkflowPayload) error {
+	var nextRun *time.Time
+	triggerConfigStr := wp.TriggerConfig
+	if wp.TriggerType == string(TriggerTypeCron) && wp.TriggerConfig != "" {
+		expr := wp.TriggerConfig
+		var cfg struct {
+			CronExpression string `json:"cron_expression"`
+			Cron           string `json:"cron"`
+			Expression     string `json:"expression"`
+		}
+		if err := json.Unmarshal([]byte(wp.TriggerConfig), &cfg); err == nil {
+			if cfg.CronExpression != "" {
+				expr = cfg.CronExpression
+			} else if cfg.Cron != "" {
+				expr = cfg.Cron
+			} else if cfg.Expression != "" {
+				expr = cfg.Expression
+			}
+		} else {
+			triggerConfigStr = fmt.Sprintf(`{"cron_expression":%q}`, expr)
+		}
+
+		if expr != "" {
+			if sched, err := cron.ParseStandard(expr); err == nil {
+				t := sched.Next(time.Now())
+				nextRun = &t
+			}
+		}
+	}
+
+	queryUpdateWorkflow := `UPDATE workflows SET 
+		name = $1, 
+		trigger_type = $2, 
+		trigger_config = $3, 
+		next_run_at = $4,
+		updated_at = now()
+	WHERE id = $5 AND deleted_at IS NULL`
+
+	opts := pgx.TxOptions{
+		IsoLevel:       pgx.ReadCommitted,
+		AccessMode:     pgx.ReadWrite,
+		DeferrableMode: pgx.NotDeferrable,
+	}
+	tx, err := s.pool.BeginTx(ctx, opts)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	// Collect and upsert any worker definitions included in the workflow template
+	var workersToUpsert []Worker
+	workersToUpsert = append(workersToUpsert, wp.Workers...)
+	for _, step := range wp.Steps {
+		if step.Worker != nil {
+			workersToUpsert = append(workersToUpsert, *step.Worker)
+		}
+	}
+
+	if len(workersToUpsert) > 0 {
+		_, err := s.UpsertWorker(ctx, tx, workersToUpsert)
+		if err != nil {
+			return fmt.Errorf("failed to upsert workers for workflow template: %w", err)
+		}
+	}
+
+	_, err = tx.Exec(ctx, queryUpdateWorkflow, wp.Name, wp.TriggerType, triggerConfigStr, nextRun, id)
+	if err != nil {
+		return err
+	}
+
+	// Delete existing steps
+	_, err = tx.Exec(ctx, `DELETE FROM workflow_steps WHERE workflow_id = $1`, id)
+	if err != nil {
+		return err
+	}
+
+	// Copy in new steps
+	identifier := pgx.Identifier{"workflow_steps"}
+	columns := []string{"workflow_id", "slug", "step_order", "condition", "payload"}
+
+	rowSrc := pgx.CopyFromSlice(len(wp.Steps), func(i int) ([]any, error) {
+		return []any{
+			id,
+			wp.Steps[i].Slug,
+			wp.Steps[i].StepOrder,
+			wp.Steps[i].TriggerCondition,
+			wp.Steps[i].Payload,
+		}, nil
+	})
+	_, err = tx.CopyFrom(ctx, identifier, columns, rowSrc)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
 }

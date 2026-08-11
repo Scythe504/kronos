@@ -74,7 +74,7 @@ func main() {
 	wg.Go(func() { cronSched.Start(ctx) })
 
 	wg.Go(func() {
-		nodes.SendHeartbeat(db, ctx, id, nodeCfg.TaskUnit, func(hbCtx context.Context, newSlugs []string) {
+		nodes.SendHeartbeat(db, ctx, id, nodeCfg, func(hbCtx context.Context, newSlugs []string) {
 			p.SyncAllowedSlugs(hbCtx, newSlugs)
 		})
 	})

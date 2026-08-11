@@ -37,3 +37,5 @@ data
 run_worker.sh
 .node_id
 /bin/
+# Added by goreleaser init:
+dist/

@@ -249,3 +249,13 @@ func (s *Server) deleteTask(w http.ResponseWriter, r *http.Request) {
 		ID:      deletedID,
 	})
 }
+
+func (s *Server) getTaskStats(w http.ResponseWriter, r *http.Request) {
+	stats, err := s.db.GetTaskStats(r.Context())
+	if err != nil {
+		s.tel.LogErrorln(r.Context(), "Failed to get task stats", "path", r.URL.Path, "error", err)
+		utils.WriteError(w, http.StatusInternalServerError, "Failed to get task stats")
+		return
+	}
+	utils.WriteJSON(w, http.StatusOK, stats)
+}

@@ -86,6 +86,7 @@ type Node struct {
 	CloudRegion     string     `db:"cloud_region" json:"cloud_region"`
 	CloudPlatform   string     `db:"cloud_platform" json:"cloud_platform"`
 	TaskUnit        TaskUnit   `db:"task_unit" json:"task_unit"`
+	AllowedSlugs    []string   `db:"allowed_slugs" json:"allowed_slugs"`
 	Status          NodeStatus `db:"status" json:"status"`
 	NodeVersion     string     `db:"node_version" json:"node_version"`
 	LastHeartbeatAt time.Time  `db:"last_heartbeat_at" json:"last_heartbeat_at"`
@@ -121,6 +122,7 @@ type Workflow struct {
 	TriggerType   TriggerType     `db:"trigger_type" json:"trigger_type"`
 	TriggerConfig json.RawMessage `db:"trigger_config" json:"trigger_config"`
 	NextRunAt     sql.NullTime    `db:"next_run_at" json:"next_run_at"`
+	Steps         []WorkflowStep  `db:"-" json:"steps"`
 	CreatedAt     time.Time       `db:"created_at" json:"created_at"`
 	UpdatedAt     time.Time       `db:"updated_at" json:"updated_at"`
 	DeletedAt     sql.NullTime    `db:"deleted_at" json:"deleted_at"`
@@ -140,7 +142,7 @@ type WorkflowStep struct {
 	ID         uuid.UUID        `db:"id" json:"id"`
 	WorkflowID uuid.UUID        `db:"workflow_id" json:"workflow_id"`
 	Slug       string           `db:"slug" json:"slug"`
-	Condition  TriggerCondition `db:"condition" json:"condition"`
+	Condition  TriggerCondition `db:"condition" json:"trigger_condition"`
 	StepOrder  int              `db:"step_order" json:"step_order"`
 	Payload    json.RawMessage  `db:"payload" json:"payload"`
 }

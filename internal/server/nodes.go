@@ -163,3 +163,42 @@ func (s *Server) getNode(w http.ResponseWriter, r *http.Request) {
 
 	utils.WriteJSON(w, http.StatusOK, node)
 }
+
+type updateNodeRequest struct {
+	TaskUnit     string   `json:"task_unit"`
+	AllowedSlugs []string `json:"allowed_slugs"`
+}
+
+func (s *Server) updateNode(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		utils.WriteError(w, http.StatusBadRequest, "Node ID parameter required")
+		return
+	}
+
+	var reqBody updateNodeRequest
+	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+		s.tel.LogInfo(r.Context(), "Failed to decode update node body", "path", r.URL.Path, "httpCode", http.StatusBadRequest, "error", err)
+		utils.WriteError(w, http.StatusBadRequest, "Invalid Request Body")
+		return
+	}
+	defer r.Body.Close()
+
+	if reqBody.TaskUnit == "" {
+		utils.WriteError(w, http.StatusBadRequest, "task_unit is required")
+		return
+	}
+
+	err := s.db.UpdateNode(r.Context(), id, database.TaskUnit(reqBody.TaskUnit), reqBody.AllowedSlugs)
+	if err != nil {
+		s.tel.LogErrorln(r.Context(), "Failed to update node", "id", id, "error", err)
+		utils.WriteError(w, http.StatusInternalServerError, "Failed to update node")
+		return
+	}
+
+	s.tel.LogInfo(r.Context(), "Node updated successfully", "node_id", id)
+	utils.WriteJSON(w, http.StatusOK, map[string]string{
+		"message": "Node updated successfully",
+		"id":      id,
+	})
+}

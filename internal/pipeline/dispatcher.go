@@ -3,6 +3,7 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/scythe504/kronos/internal/database"
@@ -38,7 +39,16 @@ func (p *Pipeline) Start(ctx context.Context) {
 				attribute.String("task_unit", string(nodeCfg.TaskUnit)),
 			)
 
-			tasks, err = p.db.GetTasks(pollCtx, p.nodeID, []database.TaskUnit{nodeCfg.TaskUnit}, p.allowedSlugs)
+			var units []database.TaskUnit
+			for _, part := range strings.FieldsFunc(string(nodeCfg.TaskUnit), func(r rune) bool {
+				return r == ',' || r == '|' || r == '&' || r == ' '
+			}) {
+				trimmed := database.TaskUnit(strings.TrimSpace(part))
+				if trimmed != "" {
+					units = append(units, trimmed)
+				}
+			}
+			tasks, err = p.db.GetTasks(pollCtx, p.nodeID, units, p.allowedSlugs)
 			if err != nil {
 				p.tel.LogErrorln(pollCtx, "Failed to poll tasks from database", "error", err.Error())
 				return

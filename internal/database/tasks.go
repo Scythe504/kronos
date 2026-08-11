@@ -663,3 +663,28 @@ func (s *service) ReapStuckTasks(ctx context.Context, threshold time.Duration) (
 
 	return tagRequeue.RowsAffected() + tagFail.RowsAffected(), nil
 }
+
+func (s *service) GetTaskStats(ctx context.Context) (map[string]int64, error) {
+	query := `SELECT status, COUNT(*) FROM tasks WHERE deleted_at IS NULL GROUP BY status`
+	rows, err := s.pool.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	stats := map[string]int64{
+		"queued":    0,
+		"running":   0,
+		"completed": 0,
+		"failed":    0,
+	}
+	for rows.Next() {
+		var status string
+		var count int64
+		if err := rows.Scan(&status, &count); err != nil {
+			return nil, err
+		}
+		stats[status] = count
+	}
+	return stats, nil
+}

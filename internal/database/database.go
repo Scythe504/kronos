@@ -28,11 +28,13 @@ type Service interface {
 	CreateTaskChains(ctx context.Context, tx pgx.Tx, chains []TaskChain) error
 	CreateTaskChain(ctx context.Context, steps []Step) ([]uuid.UUID, error)
 	ListTasks(ctx context.Context, page, perPage int, status, payloadSlug string) ([]Task, error)
+	GetTaskStats(ctx context.Context) (map[string]int64, error)
 	DeleteTask(ctx context.Context, id string) (string, error)
 	RetryFailedTasks(ctx context.Context, taskIDs []string) (int64, error)
 
 	// Workflow operations
 	CreateWorkflowTemplate(ctx context.Context, wp WorkflowPayload) (uuid.UUID, error)
+	UpdateWorkflowTemplate(ctx context.Context, id uuid.UUID, wp WorkflowPayload) error
 	GetWorkflowTemplate(ctx context.Context, id string) (Workflow, error)
 	GetWorkflowTemplates(ctx context.Context, page, perPage int) ([]Workflow, error)
 	DeleteWorkflowTemplate(ctx context.Context, id string) (string, error)
@@ -49,6 +51,7 @@ type Service interface {
 	UpdateNodeStatus(ctx context.Context, nodeID string, status NodeStatus) (string, error)
 	GetNode(ctx context.Context, nodeID string) (Node, error)
 	GetNodes(ctx context.Context, page int, perPage int) ([]Node, error)
+	UpdateNode(ctx context.Context, nodeID string, taskUnit TaskUnit, allowedSlugs []string) error
 	UpdateNodeLastHBeat(ctx context.Context, nodeID string) (string, error)
 
 	// Worker operations

@@ -33,11 +33,13 @@ func (s *Server) RegisterRoutes() http.Handler {
 		r.Post("/nodes/init", s.initNode)
 		r.Get("/nodes", s.getNodes)
 		r.Get("/nodes/{id}", s.getNode)
+		r.Put("/nodes/{id}", s.updateNode)
 
 		// Task routes
 		r.Post("/tasks", s.createTask)
 		r.Post("/tasks/bulk", s.createTasksBulk)
 		r.Get("/tasks", s.getTasks)
+		r.Get("/tasks/stats", s.getTaskStats)
 		r.Get("/tasks/{id}", s.getTaskByID)
 		r.Post("/tasks/retry", s.retryTasks)
 		r.Delete("/tasks/{id}", s.deleteTask)
@@ -46,6 +48,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 		r.Post("/workflows/templates", s.createWorkflowTemplate)
 		r.Get("/workflows/templates", s.getWorkflowTemplates)
 		r.Get("/workflows/templates/{id}", s.getWorkflowTemplate)
+		r.Put("/workflows/templates/{id}", s.updateWorkflowTemplate)
 		r.Delete("/workflows/templates/{id}", s.deleteWorkflowTemplate)
 		r.Post("/workflows/{id}/trigger", s.triggerWorkflow)
 		r.Post("/workflows/task-chain", s.createTaskchain)

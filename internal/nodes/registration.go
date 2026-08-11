@@ -42,44 +42,44 @@ func RegisterOrInitNode(ctx context.Context, nodeCfg *database.Node, dbURL, mast
 	var db database.Service
 	var id string
 
-	if dbURL != "" {
-		db = database.New(dbCtx, dbURL)
-		var err error
-		id, err = db.RegisterNode(dbCtx, *nodeCfg)
-		if err != nil {
-			return nil, "", fmt.Errorf("daemon registration failed: %w", err)
-		}
-	} else if masterURL != "" {
-		reqBytes, err := json.Marshal(nodeCfg)
-		if err != nil {
-			return nil, "", fmt.Errorf("master node init marshal failed: %w", err)
-		}
+	// Registration is strictly HTTP-based (routed through the master server)
+	effectiveMasterURL := masterURL
+	if effectiveMasterURL == "" {
+		effectiveMasterURL = "http://localhost:8080"
+	}
 
-		resp, err := http.Post(strings.TrimRight(masterURL, "/")+"/api/v1/nodes/init", "application/json", bytes.NewReader(reqBytes))
-		if err != nil {
-			return nil, "", fmt.Errorf("master node init http request failed: %w", err)
-		}
-		defer resp.Body.Close()
+	reqBytes, err := json.Marshal(nodeCfg)
+	if err != nil {
+		return nil, "", fmt.Errorf("master node init marshal failed: %w", err)
+	}
 
-		if resp.StatusCode != http.StatusOK {
-			return nil, "", fmt.Errorf("master returned status %d", resp.StatusCode)
-		}
+	resp, err := http.Post(strings.TrimRight(effectiveMasterURL, "/")+"/api/v1/nodes/init", "application/json", bytes.NewReader(reqBytes))
+	if err != nil {
+		return nil, "", fmt.Errorf("master node init http request failed: %w", err)
+	}
+	defer resp.Body.Close()
 
-		var initResp struct {
-			NodeID       string   `json:"node_id"`
-			DBURL        string   `json:"db_url"`
-			AllowedSlugs []string `json:"allowed_slugs"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&initResp); err != nil {
-			return nil, "", fmt.Errorf("master node init response decode failed: %w", err)
-		}
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", fmt.Errorf("master returned status %d", resp.StatusCode)
+	}
 
-		id = initResp.NodeID
-		if initResp.DBURL != "" {
-			db = database.New(dbCtx, initResp.DBURL)
-		}
-	} else {
-		return nil, "", fmt.Errorf("neither DB_URL nor MASTER_URL is configured in environment or agent.conf")
+	var initResp struct {
+		NodeID       string   `json:"node_id"`
+		DBURL        string   `json:"db_url"`
+		AllowedSlugs []string `json:"allowed_slugs"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&initResp); err != nil {
+		return nil, "", fmt.Errorf("master node init response decode failed: %w", err)
+	}
+
+	id = initResp.NodeID
+
+	effectiveDBURL := dbURL
+	if effectiveDBURL == "" {
+		effectiveDBURL = initResp.DBURL
+	}
+	if effectiveDBURL != "" {
+		db = database.New(dbCtx, effectiveDBURL)
 	}
 
 	nodeIDPath := utils.GetNodeIDFilePath()
