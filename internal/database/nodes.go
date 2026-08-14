@@ -31,7 +31,7 @@ func (s *service) RegisterNode(ctx context.Context, n Node) (string, error) {
 			node_version
 		)
 		VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
 		)
 		ON CONFLICT (id) DO UPDATE SET
 			kernel = EXCLUDED.kernel,

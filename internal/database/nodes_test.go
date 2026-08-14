@@ -13,21 +13,20 @@ func TestNodeLifecycle(t *testing.T) {
 	gpuVram := int64(8192)
 	gpuModel := "NVIDIA RTX 4090"
 	node := Node{
-		MachineID:     machineID,
-		Kernel:        "Linux 6.8.0",
-		Architecture:  "amd64",
-		GPURamKB:      &gpuVram,
-		GPUModel:      &gpuModel,
-		CPUModel:      "Intel i9-13900K",
-		CPUCores:      24,
-		RAMKB:         32768,
-		IPAddr:        "192.168.1.50",
-		Hostname:      "worker-node-1",
-		CloudRegion:   "us-east-1",
-		CloudPlatform: "aws",
-		TaskUnit:      TaskUnitCPU,
-		Status:        NodeStatusActive,
-		NodeVersion:   "v1.0.0",
+		MachineID:    machineID,
+		Kernel:       "Linux 6.8.0",
+		Architecture: "amd64",
+		GPURamKB:     &gpuVram,
+		GPUModel:     &gpuModel,
+		CPUModel:     "Intel i9-13900K",
+		CPUCores:     24,
+		RAMKB:        32768,
+		IPAddr:       "192.168.1.50",
+		Hostname:     "worker-node-1",
+		TaskUnit:     TaskUnitCPU,
+		AllowedSlugs: []string{"aniflux"},
+		Status:       NodeStatusActive,
+		NodeVersion:  "v1.0.0",
 	}
 
 	var nodeID string

@@ -15,7 +15,6 @@ import (
 
 type nodeInitRequest struct {
 	ID           string   `json:"id,omitempty"`
-	NodeID       string   `json:"node_id,omitempty"`
 	MachineID    string   `json:"machine_id"`
 	Secret       string   `json:"secret"`
 	TaskUnit     string   `json:"task_unit"`
@@ -34,15 +33,11 @@ type nodeInitRequest struct {
 }
 
 type nodeInitResponse struct {
-	NodeID       string   `json:"node_id"`
+	NodeID       string   `json:"id"`
 	DBURL        string   `json:"db_url"`
 	SecretKey    []byte   `json:"secret_key"`
 	AllowedSlugs []string `json:"allowed_slugs"`
 	TaskUnit     string   `json:"task_unit"`
-}
-
-type nodeResponse struct {
-	Message string `json:"message"`
 }
 
 func (s *Server) initNode(w http.ResponseWriter, r *http.Request) {
@@ -73,9 +68,7 @@ func (s *Server) initNode(w http.ResponseWriter, r *http.Request) {
 
 	var parsedUUID *uuid.UUID
 	idStr := reqBody.ID
-	if idStr == "" {
-		idStr = reqBody.NodeID
-	}
+
 	if idStr != "" {
 		if u, err := uuid.Parse(idStr); err == nil && u != uuid.Nil {
 			parsedUUID = &u
@@ -104,6 +97,7 @@ func (s *Server) initNode(w http.ResponseWriter, r *http.Request) {
 		GPURamKB:     gpuRAM,
 		IPAddr:       reqBody.IPAddr,
 		Hostname:     reqBody.Hostname,
+		AllowedSlugs: []string{},
 		TaskUnit:     unit,
 		NodeVersion:  reqBody.NodeVersion,
 	}

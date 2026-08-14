@@ -48,7 +48,10 @@ func setupTestDB(t *testing.T) (Service, *service, context.Context) {
 
 	dbService := New(ctx, dbURL)
 	s := dbService.(*service)
-
+	err = s.Migrate()
+	if err != nil {
+		t.Fatalf("failed to migrate schema")
+	}
 	// Clean up tables to ensure test independence
 	_, _ = s.pool.Exec(ctx, "TRUNCATE tasks, workflow_runs, workflow_steps, workflows, workers, nodes CASCADE")
 

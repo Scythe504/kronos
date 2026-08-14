@@ -99,14 +99,10 @@ func New(ctx context.Context, dbURL string) Service {
 		dbURL: dbURL,
 	}
 
-	if err := dbInstance.migrate(); err != nil {
-		log.Fatal(err)
-	}
-
 	return dbInstance
 }
 
-func (s *service) migrate() error {
+func (s *service) Migrate() error {
 	db := stdlib.OpenDBFromPool(s.pool)
 	defer db.Close()
 

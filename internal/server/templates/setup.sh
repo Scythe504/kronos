@@ -152,6 +152,55 @@ EOF
 echo -e "${GREEN}Configuration saved to $CONF_FILE${RESET}"
 
 # ==========================================
+# Systemd Service File Installation
+# ==========================================
+if [ "$OS" = "Linux" ] && command -v systemctl >/dev/null 2>&1; then
+  if [ "$(id -u)" -eq 0 ]; then
+    SERVICE_FILE="/etc/systemd/system/kronos.service"
+    cat << EOF > "$SERVICE_FILE"
+[Unit]
+Description=Kronos Worker Node Agent Daemon
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=$CONF_FILE
+ExecStart=$BIN_DIR/kronos
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reload 2>/dev/null || true
+    echo -e "${GREEN}Systemd system service installed at $SERVICE_FILE${RESET}"
+  else
+    USER_SYSTEMD_DIR="$HOME/.config/systemd/user"
+    mkdir -p "$USER_SYSTEMD_DIR"
+    SERVICE_FILE="$USER_SYSTEMD_DIR/kronos.service"
+    cat << EOF > "$SERVICE_FILE"
+[Unit]
+Description=Kronos Worker Node Agent Daemon
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=$CONF_FILE
+ExecStart=$BIN_DIR/kronos
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=default.target
+EOF
+
+    systemctl --user daemon-reload 2>/dev/null || true
+    echo -e "${GREEN}Systemd user service installed at $SERVICE_FILE${RESET}"
+  fi
+fi
+
+# ==========================================
 # Execution Instructions & Documentation
 # ==========================================
 echo -e "\n${BOLD}${CYAN}Daemon Execution Commands:${RESET}"
@@ -170,4 +219,5 @@ echo -e "\n${CYAN}For documentation & setup guides, visit:${RESET}"
 echo -e "${BOLD}${DOCS_URL}${RESET}"
 
 echo -e "\n${BOLD}${GREEN}=== Node Setup Completed Successfully! ===${RESET}"
+
 
