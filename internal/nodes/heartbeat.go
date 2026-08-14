@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -78,13 +79,7 @@ func SendHeartbeat(db database.Service, ctx context.Context, nodeID string, node
 
 					for _, w := range workers {
 						// Match worker unit against node units
-						matched := false
-						for _, u := range units {
-							if string(w.TaskUnit) == u {
-								matched = true
-								break
-							}
-						}
+						matched := slices.Contains(units, string(w.TaskUnit))
 						if matched {
 							newSlugs = append(newSlugs, w.Slug)
 						}

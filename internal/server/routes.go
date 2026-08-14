@@ -53,14 +53,6 @@ func (s *Server) RegisterRoutes() http.Handler {
 		r.Post("/workflows/{id}/trigger", s.triggerWorkflow)
 		r.Post("/workflows/task-chain", s.createTaskchain)
 		r.Post("/webhooks/{workflow_id}", s.triggerWorkflow)
-
-		// SSE Log & Metrics Streaming
-		r.Get("/metrics/stream", s.streamLogs)
-		r.Get("/logs/stream", s.streamLogs)
-
-		// Secure Prometheus Read-Only Proxy
-		r.Get("/metrics/prometheus/query", s.queryPrometheusProxy)
-		r.Get("/metrics/prometheus/query_range", s.queryPrometheusRangeProxy)
 	})
 
 	return m
