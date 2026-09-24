@@ -17,14 +17,6 @@ func NewNoopTelemetry(cfg Config) (*NoopTelemetry, error) {
 	return &NoopTelemetry{cfg: cfg}, nil
 }
 
-func (n *NoopTelemetry) GetServiceName() string {
-	return n.cfg.ServiceName
-}
-
-func (n *NoopTelemetry) GetConfig() Config {
-	return n.cfg
-}
-
 func (n *NoopTelemetry) LogInfo(ctx context.Context, msg string, args ...any)       {}
 func (n *NoopTelemetry) LogErrorln(ctx context.Context, msg string, args ...any)    {}
 func (n *NoopTelemetry) LogFatalln(ctx context.Context, msg string, args ...any)    {}
@@ -44,13 +36,5 @@ func (n *NoopTelemetry) MeterInt64UpDownCounter(metric Metric) (otelmetric.Int64
 func (n *NoopTelemetry) TraceStart(ctx context.Context, name string) (context.Context, oteltrace.Span) {
 	return trace_noop.NewTracerProvider().Tracer(n.cfg.ServiceName).Start(ctx, name)
 }
-
-func (n *NoopTelemetry) SubscribeLogs() chan string {
-	ch := make(chan string)
-	close(ch)
-	return ch
-}
-
-func (n *NoopTelemetry) UnsubscribeLogs(ch chan string) {}
 
 func (n *NoopTelemetry) Shutdown(ctx context.Context) {}
