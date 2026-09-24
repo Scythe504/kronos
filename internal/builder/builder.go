@@ -23,8 +23,8 @@ type BuildWorkerResult struct {
 	Cached   bool
 }
 
-// ComputeBuildCacheKey generates a deterministic SHA-256 hash representing a worker build configuration.
-func ComputeBuildCacheKey(ctx context.Context, worker database.Worker) string {
+// computeBuildCacheKey generates a deterministic SHA-256 hash representing a worker build configuration.
+func computeBuildCacheKey(ctx context.Context, worker database.Worker) string {
 	h := sha256.New()
 	h.Write([]byte(worker.RepoURL))
 	h.Write([]byte("|"))
@@ -34,7 +34,7 @@ func ComputeBuildCacheKey(ctx context.Context, worker database.Worker) string {
 	// Query remote Git HEAD SHA to invalidate cache whenever new commits are pushed
 	user, token := resolveGitCredentials(worker.EnvVars)
 	authURL := formatAuthenticatedURL(worker.RepoURL, user, token)
-	remoteCommitSHA := FetchRemoteHeadCommit(ctx, authURL, worker.RepoRef)
+	remoteCommitSHA := fetchRemoteHeadCommit(ctx, authURL, worker.RepoRef)
 	if remoteCommitSHA != "" {
 		h.Write([]byte(remoteCommitSHA))
 	}

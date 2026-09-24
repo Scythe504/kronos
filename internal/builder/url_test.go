@@ -64,14 +64,14 @@ func createLocalTestGitRepo(t *testing.T) (string, func()) {
 func TestFetchRemoteHeadCommit(t *testing.T) {
 	ctx := t.Context()
 
-	commitSHA := FetchRemoteHeadCommit(ctx, testGitUrl, "main")
+	commitSHA := fetchRemoteHeadCommit(ctx, testGitUrl, "main")
 	if commitSHA == "" {
 		t.Fatalf("expected non-empty commit SHA")
 	}
 }
 
 func TestFetchRemoteHeadCommit_InvalidURL(t *testing.T) {
-	sha := FetchRemoteHeadCommit(t.Context(), "https://invalid-domain.example.com/repo.git", "main")
+	sha := fetchRemoteHeadCommit(t.Context(), "https://invalid-domain.example.com/repo.git", "main")
 	if sha != "" {
 		t.Fatalf("expected empty SHA for invalid git repo URL")
 	}
@@ -85,9 +85,9 @@ func TestCloneRepo(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	err = CloneRepo(ctx, testGitUrl, "main", tempDir)
+	err = cloneRepo(ctx, testGitUrl, "main", tempDir)
 	if err != nil {
-		t.Fatalf("CloneRepo error = %v", err)
+		t.Fatalf("cloneRepo error = %v", err)
 	}
 }
 
@@ -99,7 +99,7 @@ func TestCloneRepo_InvalidURL(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	err = CloneRepo(ctx, "https://invalid-domain.example.com/repo.git", "main", tempDir)
+	err = cloneRepo(ctx, "https://invalid-domain.example.com/repo.git", "main", tempDir)
 	if err == nil {
 		t.Fatalf("expected error when cloning invalid git repository, got nil")
 	}
@@ -115,9 +115,9 @@ func TestCloneRepo_RealRepo(t *testing.T) {
 	}
 	defer os.RemoveAll(targetDir)
 
-	err = CloneRepo(t.Context(), repoDir, "", targetDir)
+	err = cloneRepo(t.Context(), repoDir, "", targetDir)
 	if err != nil {
-		t.Fatalf("CloneRepo failed for real local repo: %v", err)
+		t.Fatalf("cloneRepo failed for real local repo: %v", err)
 	}
 
 	if _, err := os.Stat(filepath.Join(targetDir, "Dockerfile")); os.IsNotExist(err) {

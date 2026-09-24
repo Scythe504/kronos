@@ -37,13 +37,13 @@ func NewManager(cfg BuilderConfig, tel telemetry.TelemetryProvider) (*Manager, e
 	}, nil
 }
 
-// GetWorkspacePath generates a clean workspace directory path for a specific worker slug and cache key.
-func (m *Manager) GetWorkspacePath(slug string, cacheKey string) string {
+// getWorkspacePath generates a clean workspace directory path for a specific worker slug and cache key.
+func (m *Manager) getWorkspacePath(slug string, cacheKey string) string {
 	return filepath.Join(m.config.RootDir, slug, cacheKey)
 }
 
-// IsImageCached inspects the local Docker daemon to check if the target image tag already exists.
-func (m *Manager) IsImageCached(ctx context.Context, imageTag string) bool {
+// isImageCached inspects the local Docker daemon to check if the target image tag already exists.
+func (m *Manager) isImageCached(ctx context.Context, imageTag string) bool {
 	if _, err := exec.LookPath("docker"); err != nil {
 		return false
 	}
@@ -57,10 +57,10 @@ func (m *Manager) Build(ctx context.Context, worker database.Worker) (*BuildWork
 		return nil, fmt.Errorf("worker %s has empty repo_url", worker.Slug)
 	}
 
-	cacheKey := ComputeBuildCacheKey(ctx, worker)
+	cacheKey := computeBuildCacheKey(ctx, worker)
 	imageTag := fmt.Sprintf("kronos-worker:%s-%s", worker.Slug, cacheKey)
 
-	if m.IsImageCached(ctx, imageTag) {
+	if m.isImageCached(ctx, imageTag) {
 		m.tel.LogInfo(ctx, "Build cache hit, skipping compilation", "slug", worker.Slug, "image", imageTag, "cache_key", cacheKey)
 		return &BuildWorkerResult{
 			ImageTag: imageTag,
@@ -70,9 +70,9 @@ func (m *Manager) Build(ctx context.Context, worker database.Worker) (*BuildWork
 	}
 
 	// Invalidate & remove old image versions for this slug since cache key changed
-	m.PruneStaleImagesForSlug(ctx, worker.Slug, imageTag)
+	m.pruneStaleImagesForSlug(ctx, worker.Slug, imageTag)
 
-	workspaceDir := m.GetWorkspacePath(worker.Slug, cacheKey)
+	workspaceDir := m.getWorkspacePath(worker.Slug, cacheKey)
 	if err := os.MkdirAll(workspaceDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed creating workspace directory %s: %w", workspaceDir, err)
 	}
@@ -82,7 +82,7 @@ func (m *Manager) Build(ctx context.Context, worker database.Worker) (*BuildWork
 	user, token := resolveGitCredentials(worker.EnvVars)
 	cloneURL := formatAuthenticatedURL(worker.RepoURL, user, token)
 
-	if err := CloneRepo(ctx, cloneURL, worker.RepoRef, workspaceDir); err != nil {
+	if err := cloneRepo(ctx, cloneURL, worker.RepoRef, workspaceDir); err != nil {
 		if !m.config.KeepBuildArtifacts {
 			os.RemoveAll(workspaceDir)
 		}
@@ -105,8 +105,8 @@ func (m *Manager) Build(ctx context.Context, worker database.Worker) (*BuildWork
 	return res, nil
 }
 
-// PruneStaleImagesForSlug removes older Docker images for a worker slug when a new version is compiled.
-func (m *Manager) PruneStaleImagesForSlug(ctx context.Context, slug string, currentImageTag string) {
+// pruneStaleImagesForSlug removes older Docker images for a worker slug when a new version is compiled.
+func (m *Manager) pruneStaleImagesForSlug(ctx context.Context, slug string, currentImageTag string) {
 	cmd := exec.CommandContext(ctx, "docker", "images", "--format", "{{.Repository}}:{{.Tag}}", "--filter",
 		"reference=kronos-worker:"+slug+"-*")
 	out, err := cmd.Output()

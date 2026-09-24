@@ -38,7 +38,7 @@ func GetRepoRef(ctx context.Context, repoURL string) (string, error) {
 	return "main", nil
 }
 
-func FetchRemoteHeadCommit(ctx context.Context, repoURL string, repoRef string) string {
+func fetchRemoteHeadCommit(ctx context.Context, repoURL string, repoRef string) string {
 	remStore := memory.NewStorage()
 	remConfig := &config.RemoteConfig{
 		Name: "origin",
@@ -64,7 +64,7 @@ func FetchRemoteHeadCommit(ctx context.Context, repoURL string, repoRef string) 
 	return ""
 }
 
-func CloneRepo(ctx context.Context, repoURL string, repoRef string, targetDir string) error {
+func cloneRepo(ctx context.Context, repoURL string, repoRef string, targetDir string) error {
 	cloneOpts := &git.CloneOptions{
 		URL:   repoURL,
 		Depth: 1,
