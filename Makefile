@@ -10,6 +10,9 @@ build-api:
 	@echo "Building API..."
 	@go build -o bin/api cmd/api/main.go
 
+run-migrate:
+	@go run cmd/migrate/main.go
+
 run-api:
 	@go run cmd/api/main.go
 
@@ -43,4 +46,4 @@ watch:
             fi; \
         fi
 
-.PHONY: all build run test clean watch
+.PHONY: all build build-orc build-api run-migrate run-api run-orc seed test clean watch

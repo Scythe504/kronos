@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"github.com/scythe504/kronos/internal/builder"
-	"github.com/scythe504/kronos/internal/cron"
 	"github.com/scythe504/kronos/internal/nodes"
 	"github.com/scythe504/kronos/internal/pipeline"
 	"github.com/scythe504/kronos/internal/telemetry"
@@ -36,14 +35,16 @@ func main() {
 	// Load configuration from OS-native agent.conf if available
 	nodes.LoadAgentConfig()
 
-	dbURL := os.Getenv("DB_URL")
 	masterURL := os.Getenv("MASTER_URL")
 
 	nodeCfg := nodes.InitNodeConfig(ctx)
 
-	db, id, err := nodes.RegisterOrInitNode(ctx, nodeCfg, dbURL, masterURL)
+	db, id, err := nodes.RegisterOrInitNode(ctx, nodeCfg, masterURL)
 	if err != nil {
 		log.Fatal("[ERR_NODE_REGISTRATION_FAIL]:", err)
+	}
+	if db != nil {
+		defer db.Close()
 	}
 
 	// Start publishing node resource metrics (CPU/Memory/GPU)
@@ -69,9 +70,6 @@ func main() {
 
 	p := pipeline.Init(db, id, tel, builderMgr, allowedSlugs)
 	p.PrecacheWorkers(ctx, allowedSlugs)
-
-	cronSched := cron.NewScheduler(db, tel, builderMgr)
-	wg.Go(func() { cronSched.Start(ctx) })
 
 	wg.Go(func() {
 		nodes.SendHeartbeat(db, ctx, id, nodeCfg, func(hbCtx context.Context, newSlugs []string) {

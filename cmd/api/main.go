@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/scythe504/kronos/internal/database"
 	"github.com/scythe504/kronos/internal/nodes"
 	"github.com/scythe504/kronos/internal/server"
 	"github.com/scythe504/kronos/internal/telemetry"
@@ -78,7 +79,10 @@ func main() {
 		log.Println("[WARN] Failed to start system stats publisher for master node:", err)
 	}
 
-	server := server.New(ctx, tel)
+	db := database.New(ctx, "")
+	defer db.Close()
+
+	server := server.New(ctx, db, tel)
 	done := make(chan bool, 1)
 
 	// Pass context to the graceful shutdown monitor

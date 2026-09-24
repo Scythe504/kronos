@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -15,20 +14,12 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 	"github.com/scythe504/kronos/internal/database"
+	"github.com/scythe504/kronos/internal/utils"
 
 	_ "github.com/joho/godotenv/autoload"
 )
 
 type payloadSlug string
-
-func randInt(max *big.Int) *big.Int {
-	r, err := rand.Int(rand.Reader, max)
-	if err != nil {
-		panic(err)
-	}
-
-	return r
-}
 
 const seedCount = 100000
 
@@ -45,16 +36,16 @@ var (
 
 func getVideoPayload() json.RawMessage {
 	// Pick random resolution and format
-	res := resolutions[randInt(big.NewInt(int64(len(resolutions)))).Int64()]
-	fmtStr := formats[randInt(big.NewInt(int64(len(formats)))).Int64()]
-	fileID := randInt(big.NewInt(99999)).Int64()
+	res := resolutions[utils.RandInt(big.NewInt(int64(len(resolutions))))]
+	fmtStr := formats[utils.RandInt(big.NewInt(int64(len(formats))))]
+	fileID := utils.RandInt(big.NewInt(99999))
 
 	videoPayload := map[string]any{
-		"source_uri":    fmt.Sprintf("s3://fluxd-incoming/video_%d.raw", fileID),
-		"target_uri":    fmt.Sprintf("s3://fluxd-processed/video_%d.%s", fileID, fmtStr),
+		"source_uri":    fmt.Sprintf("s3://kronos-incoming/video_%d.raw", fileID),
+		"target_uri":    fmt.Sprintf("s3://kronos-processed/video_%d.%s", fileID, fmtStr),
 		"resolution":    res,
 		"format":        fmtStr,
-		"extract_audio": randInt(big.NewInt(2)).Int64() == 1, // 50% chance of true
+		"extract_audio": utils.RandInt(big.NewInt(2)) == 1, // 50% chance of true
 	}
 
 	raw, _ := json.Marshal(videoPayload)
@@ -62,15 +53,15 @@ func getVideoPayload() json.RawMessage {
 }
 
 func getCsvPayload() json.RawMessage {
-	layout := layouts[randInt(big.NewInt(int64(len(layouts)))).Int64()]
-	fileID := randInt(big.NewInt(99999)).Int64()
+	layout := layouts[utils.RandInt(big.NewInt(int64(len(layouts))))]
+	fileID := utils.RandInt(big.NewInt(99999))
 
 	csvPayload := map[string]any{
-		"source_uri":  fmt.Sprintf("s3://fluxd-incoming/report_%d.csv", fileID),
-		"target_uri":  fmt.Sprintf("s3://fluxd-processed/report_%d.pdf", fileID),
+		"source_uri":  fmt.Sprintf("s3://kronos-incoming/report_%d.csv", fileID),
+		"target_uri":  fmt.Sprintf("s3://kronos-processed/report_%d.pdf", fileID),
 		"layout":      layout,
 		"has_headers": true,
-		"font_size":   10 + randInt(big.NewInt(4)).Int64(), // Font size 10-13
+		"font_size":   10 + utils.RandInt(big.NewInt(4)), // Font size 10-13
 	}
 
 	raw, _ := json.Marshal(csvPayload)
@@ -135,23 +126,28 @@ func (s *service) migrate() error {
 }
 
 func main() {
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	New(ctx)
 
-	// var count int
-	// db.pool.QueryRow(ctx, "SELECT COUNT(*) FROM tasks").Scan(&count)
-	// if count > 0 {
-	// 	log.Println("Already seeded, skipping")
-	// 	return
-	// }
+	// Ensure the two seed workers exist in the workers table
+	workerInsertQuery := `
+		INSERT INTO workers (slug, name, repo_url, repo_ref, entrypoint, task_unit, task_timeout_seconds)
+		VALUES 
+			('video_transcode', 'Video Transcoder', 'https://github.com/scythe504/kronos.git', 'main', 'main.go', 'gpu', 300),
+			('csv_to_pdf', 'CSV to PDF Generator', 'https://github.com/scythe504/kronos.git', 'main', 'main.go', 'cpu', 120)
+		ON CONFLICT (slug) DO NOTHING;
+	`
+	if _, err := db.pool.Exec(ctx, workerInsertQuery); err != nil {
+		log.Printf("[WARN] Failed to insert seed workers: %v", err)
+	}
 
 	maxInt := big.NewInt(2)
 
 	tasks := make([]database.Task, seedCount)
 
 	for i := range len(tasks) {
-		rInt := randInt(maxInt).Int64()
+		rInt := utils.RandInt(maxInt)
 
 		switch int(rInt) {
 		case 0:
