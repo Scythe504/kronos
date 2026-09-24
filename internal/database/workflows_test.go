@@ -1,62 +1,14 @@
 package database
 
 import (
-	"context"
 	"encoding/json"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	rcron "github.com/robfig/cron/v3"
 	"github.com/stretchr/testify/assert"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
-
-// setupTestDB handles environment setup and database initialization with Testcontainers fallback.
-func setupTestDB(t *testing.T) (Service, *service, context.Context) {
-	ctx := context.Background()
-
-	pgContainer, err := postgres.Run(ctx,
-		"postgres:17",
-		postgres.WithDatabase("kronos_test"),
-		postgres.WithUsername("postgres"),
-		postgres.WithPassword("password"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(15*time.Second),
-		),
-	)
-	if err != nil {
-		t.Fatalf("failed to start postgres container: %v", err)
-	}
-	t.Cleanup(func() {
-		if err := testcontainers.TerminateContainer(pgContainer); err != nil {
-			t.Fatalf("failed to terminate container: %v", err)
-		}
-	})
-
-	dbURL, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		t.Fatalf("failed to get connection string: %v", err)
-	}
-	t.Setenv("DB_URL", dbURL)
-	os.Setenv("DB_URL", dbURL)
-
-	dbService := New(ctx, dbURL)
-	s := dbService.(*service)
-	err = s.Migrate()
-	if err != nil {
-		t.Fatalf("failed to migrate schema")
-	}
-	// Clean up tables to ensure test independence
-	_, _ = s.pool.Exec(ctx, "TRUNCATE tasks, workflow_runs, workflow_steps, workflows, workers, nodes CASCADE")
-
-	return dbService, s, ctx
-}
 
 func TestCreateWorkflowTemplate(t *testing.T) {
 	dbService, s, ctx := setupTestDB(t)
