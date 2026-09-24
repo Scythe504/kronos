@@ -35,10 +35,7 @@ func InitNodeConfig(ctx context.Context) *database.Node {
 }
 
 // RegisterOrInitNode registers node hardware specs via direct DB or Master HTTP API, returning database.Service and node ID.
-func RegisterOrInitNode(ctx context.Context, nodeCfg *database.Node, dbURL, masterURL string) (database.Service, string, error) {
-	dbCtx, dbCancel := context.WithTimeout(ctx, 10*time.Second)
-	defer dbCancel()
-
+func RegisterOrInitNode(ctx context.Context, nodeCfg *database.Node, masterURL string) (database.Service, string, error) {
 	var db database.Service
 	var id string
 
@@ -53,7 +50,15 @@ func RegisterOrInitNode(ctx context.Context, nodeCfg *database.Node, dbURL, mast
 		return nil, "", fmt.Errorf("master node init marshal failed: %w", err)
 	}
 
-	resp, err := http.Post(strings.TrimRight(effectiveMasterURL, "/")+"/api/v1/nodes/init", "application/json", bytes.NewReader(reqBytes))
+	url := strings.TrimRight(effectiveMasterURL, "/") + "/api/v1/nodes/init"
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(reqBytes))
+	if err != nil {
+		return nil, "", fmt.Errorf("master node init request create failed: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, "", fmt.Errorf("master node init http request failed: %w", err)
 	}
@@ -64,7 +69,7 @@ func RegisterOrInitNode(ctx context.Context, nodeCfg *database.Node, dbURL, mast
 	}
 
 	var initResp struct {
-		NodeID       string   `json:"node_id"`
+		ID           string   `json:"id"`
 		DBURL        string   `json:"db_url"`
 		AllowedSlugs []string `json:"allowed_slugs"`
 	}
@@ -72,14 +77,11 @@ func RegisterOrInitNode(ctx context.Context, nodeCfg *database.Node, dbURL, mast
 		return nil, "", fmt.Errorf("master node init response decode failed: %w", err)
 	}
 
-	id = initResp.NodeID
+	id = initResp.ID
 
-	effectiveDBURL := dbURL
-	if effectiveDBURL == "" {
-		effectiveDBURL = initResp.DBURL
-	}
+	effectiveDBURL := initResp.DBURL
 	if effectiveDBURL != "" {
-		db = database.New(dbCtx, effectiveDBURL)
+		db = database.New(ctx, effectiveDBURL)
 	}
 
 	nodeIDPath := utils.GetNodeIDFilePath()
