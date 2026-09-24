@@ -67,7 +67,6 @@ type Worker struct {
 	TaskTimeoutSeconds int          `db:"task_timeout_seconds" json:"task_timeout_seconds"`
 	CreatedAt          time.Time    `db:"created_at" json:"created_at"`
 	UpdatedAt          time.Time    `db:"updated_at" json:"updated_at"`
-	DeletedAt          sql.NullTime `db:"deleted_at" json:"deleted_at"`
 }
 
 // Node represents a compute node registered with the cluster
@@ -128,15 +127,6 @@ type Workflow struct {
 	DeletedAt     sql.NullTime    `db:"deleted_at" json:"deleted_at"`
 }
 
-// WorkflowRun represents a defined instance of a workflow execution
-type WorkflowRun struct {
-	ID         uuid.UUID `db:"id" json:"id"`
-	WorkflowID uuid.UUID `db:"workflow_id" json:"workflow_id"`
-	Status     string    `db:"status" json:"status"`
-	CreatedAt  time.Time `db:"created_at" json:"created_at"`
-	UpdatedAt  time.Time `db:"updated_at" json:"updated_at"`
-}
-
 // WorkflowStep represents a step in a workflow
 type WorkflowStep struct {
 	ID         uuid.UUID        `db:"id" json:"id"`
@@ -149,7 +139,6 @@ type WorkflowStep struct {
 
 // TaskChain represents follow-on execution links between tasks
 type TaskChain struct {
-	ID               uuid.UUID        `db:"id" json:"id"`
 	TriggerTaskID    uuid.UUID        `db:"trigger_task_id" json:"trigger_task_id"`
 	FollowOnTaskID   uuid.UUID        `db:"follow_on_task_id" json:"follow_on_task_id"`
 	TriggererPayload json.RawMessage  `db:"triggerer_payload" json:"triggerer_payload"`

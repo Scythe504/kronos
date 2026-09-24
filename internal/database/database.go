@@ -25,7 +25,6 @@ type Service interface {
 	CompleteTask(ctx context.Context, id uuid.UUID, timestamp time.Time, outputPayload json.RawMessage) (uuid.UUID, uuid.UUID, error)
 	CreateTask(ctx context.Context, payloadSlug string, payload json.RawMessage, runID *uuid.UUID, stepID *uuid.UUID, workflowID *uuid.UUID, unit *TaskUnit, chainTask bool) (uuid.UUID, error)
 	CreateTasks(ctx context.Context, tx pgx.Tx, tasks []Task) error
-	CreateTaskChains(ctx context.Context, tx pgx.Tx, chains []TaskChain) error
 	CreateTaskChain(ctx context.Context, steps []Step) ([]uuid.UUID, error)
 	ListTasks(ctx context.Context, page, perPage int, status, payloadSlug string) ([]Task, error)
 	GetTaskStats(ctx context.Context) (map[string]int64, error)
@@ -38,7 +37,6 @@ type Service interface {
 	GetWorkflowTemplate(ctx context.Context, id string) (Workflow, error)
 	GetWorkflowTemplates(ctx context.Context, page, perPage int) ([]Workflow, error)
 	DeleteWorkflowTemplate(ctx context.Context, id string) (string, error)
-	CompleteWorkflowRun(ctx context.Context, workflowRunID uuid.UUID, workflowID uuid.UUID) (uuid.UUID, error)
 	TriggerWorkflow(ctx context.Context, workflowID uuid.UUID) (uuid.UUID, error)
 	TriggerDueCronWorkflows(ctx context.Context) ([]uuid.UUID, error)
 
@@ -60,6 +58,9 @@ type Service interface {
 	GetWorkers(ctx context.Context, page int, perPage int) ([]Worker, error)
 	DeleteWorker(ctx context.Context, slug string) (string, error)
 
+	// Migration
+	Migrate() error
+	
 	Health() map[string]string
 	Close()
 }
@@ -68,10 +69,6 @@ type service struct {
 	pool  *pgxpool.Pool
 	dbURL string
 }
-
-var (
-	dbInstance *service
-)
 
 func New(ctx context.Context, dbURL string) Service {
 	if dbURL == "" {
@@ -94,12 +91,10 @@ func New(ctx context.Context, dbURL string) Service {
 		log.Fatalf("Ping: %v", err)
 	}
 
-	dbInstance = &service{
+	return &service{
 		pool:  pool,
 		dbURL: dbURL,
 	}
-
-	return dbInstance
 }
 
 func (s *service) Migrate() error {

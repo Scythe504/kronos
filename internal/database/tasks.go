@@ -426,11 +426,16 @@ func (s *service) CreateTasks(ctx context.Context, tx pgx.Tx, tasks []Task) erro
 		}, nil
 	})
 
-	_, err := tx.CopyFrom(ctx, identifier, columns, rowSrc)
+	if tx != nil {
+		_, err := tx.CopyFrom(ctx, identifier, columns, rowSrc)
+		return err
+	}
+
+	_, err := s.pool.CopyFrom(ctx, identifier, columns, rowSrc)
 	return err
 }
 
-func (s *service) CreateTaskChains(ctx context.Context, tx pgx.Tx, chains []TaskChain) error {
+func (s *service) createTaskChains(ctx context.Context, tx pgx.Tx, chains []TaskChain) error {
 	identifier := pgx.Identifier{"task_chains"}
 	columns := []string{
 		"trigger_task_id", "follow_on_task_id", "triggerer_payload", "condition",
@@ -540,7 +545,7 @@ func (s *service) CreateTaskChain(ctx context.Context, steps []Step) ([]uuid.UUI
 	}
 
 	if len(chains) > 0 {
-		if err := s.CreateTaskChains(ctx, tx, chains); err != nil {
+		if err := s.createTaskChains(ctx, tx, chains); err != nil {
 			return nil, err
 		}
 	}

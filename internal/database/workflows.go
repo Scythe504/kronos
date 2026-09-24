@@ -126,20 +126,6 @@ func (s *service) CreateWorkflowTemplate(ctx context.Context, wp WorkflowPayload
 	return workflowRetId, nil
 }
 
-func (s *service) CompleteWorkflowRun(ctx context.Context, workflowRunID uuid.UUID, workflowID uuid.UUID) (uuid.UUID, error) {
-	query := `UPDATE workflow_runs
-		SET status = 'success', updated_at = now()
-		WHERE id = $1 AND workflow_id = $2
-		RETURNING id
-	`
-	row := s.pool.QueryRow(ctx, query, workflowRunID, workflowID)
-	var runRetId uuid.UUID
-	if err := row.Scan(&runRetId); err != nil {
-		return uuid.Nil, err
-	}
-	return runRetId, nil
-}
-
 func (s *service) TriggerWorkflow(ctx context.Context, workflowID uuid.UUID) (uuid.UUID, error) {
 	opts := pgx.TxOptions{
 		IsoLevel:   pgx.ReadCommitted,
