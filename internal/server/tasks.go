@@ -156,7 +156,7 @@ func (s *Server) createTasksBulk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.db.CreateTasks(r.Context(), nil, tasks); err != nil {
+if err := s.db.CreateTasks(r.Context(), nil, tasks); err != nil {
 		s.tel.LogErrorln(r.Context(), "Failed bulk task creation", "count", len(tasks), "error", err)
 		utils.WriteError(w, http.StatusInternalServerError, "Failed to submit bulk tasks")
 		return

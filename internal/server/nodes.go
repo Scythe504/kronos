@@ -16,7 +16,6 @@ import (
 type nodeInitRequest struct {
 	ID           string   `json:"id,omitempty"`
 	MachineID    string   `json:"machine_id"`
-	Secret       string   `json:"secret"`
 	TaskUnit     string   `json:"task_unit"`
 	AllowedSlugs []string `json:"allowed_slugs,omitempty"`
 
@@ -33,7 +32,7 @@ type nodeInitRequest struct {
 }
 
 type nodeInitResponse struct {
-	NodeID       string   `json:"id"`
+	ID           string   `json:"id"`
 	DBURL        string   `json:"db_url"`
 	SecretKey    []byte   `json:"secret_key"`
 	AllowedSlugs []string `json:"allowed_slugs"`
@@ -97,7 +96,7 @@ func (s *Server) initNode(w http.ResponseWriter, r *http.Request) {
 		GPURamKB:     gpuRAM,
 		IPAddr:       reqBody.IPAddr,
 		Hostname:     reqBody.Hostname,
-		AllowedSlugs: []string{},
+		AllowedSlugs: allowedSlugs,
 		TaskUnit:     unit,
 		NodeVersion:  reqBody.NodeVersion,
 	}
@@ -115,7 +114,7 @@ func (s *Server) initNode(w http.ResponseWriter, r *http.Request) {
 	s.tel.LogInfo(r.Context(), "Node registered successfully", "node_id", registeredID, "machine_id", reqBody.MachineID)
 
 	utils.WriteJSON(w, http.StatusOK, nodeInitResponse{
-		NodeID:       registeredID,
+		ID:           registeredID,
 		DBURL:        dbURL,
 		SecretKey:    []byte(secretKey),
 		AllowedSlugs: allowedSlugs,

@@ -15,6 +15,8 @@ $MasterURL = if ($env:KRONOS_MASTER_URL) { $env:KRONOS_MASTER_URL } else { $Defa
 
 $AllowedSlugs = if ($env:KRONOS_ALLOWED_SLUGS) { $env:KRONOS_ALLOWED_SLUGS } else { "" }
 $TaskUnit = if ($env:KRONOS_TASK_UNIT) { $env:KRONOS_TASK_UNIT } else { "cpu" }
+$DocsURL = if ($env:KRONOS_DOCS_URL) { $env:KRONOS_DOCS_URL } else { "{{ .DocsURL }}" }
+if ($DocsURL -eq "{{ .DocsURL }}" -or -not $DocsURL) { $DocsURL = "https://docs-kronos.vercel.app" }
 
 # Directories & File Paths
 $ConfigDir = Join-Path $env:APPDATA "Kronos"

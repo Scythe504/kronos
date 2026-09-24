@@ -3,6 +3,8 @@ package server
 import (
 	"fmt"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -105,17 +107,25 @@ func (s *Server) telemetryMiddleware(next http.Handler) http.Handler {
 
 // CORS middleware
 func (s *Server) corsMiddleware(next http.Handler) http.Handler {
+	allowedOrigins := os.Getenv("CORS_ALLOWED_ORIGINS")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// CORS Headers
 		origin := r.Header.Get("Origin")
-		if origin != "" {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		} else {
+		if allowedOrigins == "" || allowedOrigins == "*" {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
+		} else if origin != "" {
+			for _, o := range strings.Split(allowedOrigins, ",") {
+				if strings.TrimSpace(o) == origin {
+					w.Header().Set("Access-Control-Allow-Origin", origin)
+					w.Header().Set("Access-Control-Allow-Credentials", "true")
+					w.Header().Add("Vary", "Origin")
+					break
+				}
+			}
 		}
+
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
 		w.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type")
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Access-Control-Max-Age", "86400")
 
 		// Handle preflight OPTIONS requests
 		if r.Method == http.MethodOptions {

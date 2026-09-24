@@ -4,22 +4,19 @@ import (
 	"context"
 	"time"
 
-	"github.com/scythe504/kronos/internal/builder"
 	"github.com/scythe504/kronos/internal/database"
 	"github.com/scythe504/kronos/internal/telemetry"
 )
 
 type Scheduler struct {
-	db      database.Service
-	tel     telemetry.TelemetryProvider
-	builder *builder.Manager
+	db  database.Service
+	tel telemetry.TelemetryProvider
 }
 
-func NewScheduler(db database.Service, tel telemetry.TelemetryProvider, bm *builder.Manager) *Scheduler {
+func NewScheduler(db database.Service, tel telemetry.TelemetryProvider) *Scheduler {
 	return &Scheduler{
-		db:      db,
-		tel:     tel,
-		builder: bm,
+		db:  db,
+		tel: tel,
 	}
 }
 
