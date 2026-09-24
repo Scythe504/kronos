@@ -64,14 +64,22 @@ func (p *Pipeline) Start(ctx context.Context) {
 		}()
 
 		if err != nil {
-			time.Sleep(2 * time.Second)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(2 * time.Second):
+			}
 			continue
 		}
 
 		if len(tasks) == 0 {
+			pollCount++
 			retryCount := min(5, pollCount)
-			timeDuration := JitterTime(retryCount).Seconds()
-			time.Sleep(time.Duration(timeDuration))
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(JitterTime(retryCount)):
+			}
 			continue
 		}
 

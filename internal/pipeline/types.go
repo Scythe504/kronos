@@ -10,9 +10,9 @@ import (
 type WorkerResultMessage string
 
 const (
-	WorkerResultSuccessMesssage   WorkerResultMessage = "success"
-	WorkerResultFailedMessage     WorkerResultMessage = "failed"
-	WorkerResultACKMessage        WorkerResultMessage = "ack"
+	WorkerResultSuccessMessage   WorkerResultMessage = "success"
+	WorkerResultFailedMessage    WorkerResultMessage = "failed"
+	WorkerResultACKMessage       WorkerResultMessage = "ack"
 	WorkerResultACKTimeoutMessage WorkerResultMessage = "ack_timeout"
 )
 

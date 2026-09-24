@@ -245,7 +245,7 @@ func (p *Pipeline) StartWorkerProcess(ctx context.Context, slug string) (*Pipe, 
 		dockerArgs = append(dockerArgs, buildRes.ImageTag)
 		cmd = exec.CommandContext(ctx, "docker", dockerArgs...)
 	} else {
-		cmd = exec.CommandContext(ctx, "go", "run", fmt.Sprintf("examples/%s/main.go", slug))
+		return nil, fmt.Errorf("builder is not initialized for worker %s", slug)
 	}
 
 	stdin, err := cmd.StdinPipe()

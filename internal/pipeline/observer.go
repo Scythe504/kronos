@@ -74,7 +74,7 @@ func (p *Pipeline) ResultHandler(ctx context.Context, rawRes json.RawMessage) {
 	}
 
 	switch wr.ResultMessage {
-	case WorkerResultSuccessMesssage:
+	case WorkerResultSuccessMessage:
 		p.tel.LogInfo(ctx, "Task execution succeeded", "task_id", wr.TaskID.String())
 		p.db.CompleteTask(ctx, wr.TaskID, wr.Timestamp, wr.Output)
 	case WorkerResultFailedMessage:

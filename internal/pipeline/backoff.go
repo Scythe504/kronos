@@ -1,7 +1,6 @@
 package pipeline
 
 import (
-	"math"
 	"math/big"
 	"time"
 
@@ -13,13 +12,13 @@ const (
 	CappedTDuration time.Duration = 20 * time.Second
 )
 
-// returns a jitter duration in milliseconds
+// returns a jitter duration
 func JitterTime(retryCount int) time.Duration {
-	powerOfTwo := math.Pow(2, float64(retryCount))
-	backoffDuration := BaseTDuration.Milliseconds() * int64(powerOfTwo)
+	powerOfTwo := int64(1 << retryCount)
+	backoffDuration := BaseTDuration.Milliseconds() * powerOfTwo
 	minDuration := min(CappedTDuration.Milliseconds(), backoffDuration)
 
 	jitter := utils.RandInt(big.NewInt(minDuration))
 
-	return time.Duration(jitter)
+	return time.Duration(jitter) * time.Millisecond
 }
